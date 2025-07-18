@@ -7,7 +7,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 ssl_context = ssl.create_default_context()
 
 engine = create_async_engine(
-    DATABASE_URL.replace("?sslmode=require", ""),  # limpia la URL
+    DATABASE_URL.replace("?sslmode=require&channel_binding=require", ""),  # limpia la URL
     echo=True,
     connect_args={"ssl": ssl_context}
 )
