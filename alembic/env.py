@@ -46,15 +46,8 @@ from app.models import (
 # Asignar metadata de los modelos
 target_metadata = Base.metadata
 
-# 🔒 Usar la URL de la base de datos desde variables de entorno
-# Convertir de asyncpg a psycopg2 para Alembic
-database_url = os.getenv("DATABASE_URL")
-if database_url and "asyncpg" in database_url:
-    # Convertir de postgresql+asyncpg a postgresql para Alembic
-    url = database_url.replace("postgresql+asyncpg://", "postgresql://")
-else:
-    # Fallback para desarrollo local
-    url = "postgresql://postgres:postgres@db:5432/fastapidb"
+# 🔒 Forzar uso de psycopg2 en Alembic (modo síncrono)
+url = "postgresql://postgres:postgres@db:5432/fastapidb"
 
 
 def run_migrations_offline():
