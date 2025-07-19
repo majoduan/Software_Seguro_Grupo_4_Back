@@ -92,12 +92,12 @@ async def login(
         max_age=7 * 24 * 60 * 60,  # 7 días en segundos
         httponly=True,  # No accesible desde JavaScript (más seguro)
         secure=True,  # 🔧 DESARROLLO: True en producción para usar HTTPS
-        samesite="none"  # 🔧 CAMBIAR: "strict" para prod y "lax" para dev
+        samesite="strict"  # 🔧 CAMBIAR: "strict" para prod y "lax" para dev
     )
     
     # 🔧 MANTENER: Schema original sin modificar
     return {
-        "access_token": token,
+        "access_token": "cookie_auth", # Indica que la autenticación se maneja con cookies
         "token_type": "bearer"
     }
 
