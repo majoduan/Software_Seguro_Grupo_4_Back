@@ -1,6 +1,6 @@
 from datetime import datetime,timezone,timedelta
 from decimal import Decimal
-from fastapi import FastAPI, Depends, HTTPException,UploadFile, File, Form, Body, Query
+from fastapi import FastAPI, Depends, HTTPException,UploadFile, File, Form, Body, Query, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -65,34 +65,66 @@ async def on_startup():
 
 @app.post("/login", response_model=schemas.Token)
 async def login(
-    form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)
+    response: Response,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncSession = Depends(get_db)
 ):
     result = await db.execute(
         select(models.Usuario).filter(models.Usuario.email == form_data.username)
     )
     usuario = result.scalars().first()
-    if not usuario or not auth.verificar_password(
-        form_data.password, usuario.password_hash
-    ):
+    
+    if not usuario or not auth.verificar_password(form_data.password, usuario.password_hash):
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
-
+    
     if not usuario.activo:
         raise HTTPException(status_code=403, detail="Usuario inactivo")
-
-    access_token = auth.crear_token_acceso(
+    
+    # Crear token
+    token = auth.crear_token_acceso(
         data={"sub": str(usuario.id_usuario), "id_rol": str(usuario.id_rol)}
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+   
+    # 🔧 Configurar cookie segura
+    response.set_cookie(
+        key="auth_token",
+        value=token,
+        max_age=7 * 24 * 60 * 60,  # 7 días en segundos
+        httponly=True,  # No accesible desde JavaScript (más seguro)
+        secure=True,  # 🔧 DESARROLLO: True en producción para usar HTTPS
+        samesite="strict"  # 🔧 CAMBIAR: "strict" para prod y "lax" para dev
+    )
+    
+    # 🔧 MANTENER: Schema original sin modificar
+    return {
+        "access_token": token,
+        "token_type": "bearer"
+    }
 
 #Usar para validar el usuario
 @app.get("/perfil")
-async def perfil_usuario(usuario: models.Usuario = Depends(get_current_user)):
+async def perfil_usuario(
+    usuario: models.Usuario = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    # 🔧 CORRECCIÓN: Obtener información completa del rol
+    result = await db.execute(
+        select(models.Rol).filter(models.Rol.id_rol == usuario.id_rol)
+    )
+    rol = result.scalars().first()
+    
+    # 🔧 CORRECCIÓN: Retornar estructura que espera el frontend
     return {
         "id": usuario.id_usuario,
-        "nombre": usuario.nombre_usuario,
-        "rol": usuario.id_rol,
+        "nombre_usuario": usuario.nombre_usuario,
+        "email": usuario.email,
+        "id_rol": usuario.id_rol,
+        "rol": {
+            "id_rol": rol.id_rol,
+            "nombre_rol": rol.nombre_rol
+        } if rol else None,
+        "activo": usuario.activo
     }
-
 
 @app.post("/register", response_model=schemas.UserOut)
 async def register_user(user: schemas.UserCreate, db: AsyncSession = Depends(get_db)):
@@ -116,6 +148,18 @@ async def register_user(user: schemas.UserCreate, db: AsyncSession = Depends(get
     await db.commit()
     await db.refresh(nuevo_usuario)
     return nuevo_usuario
+
+#Limpiar cookie
+
+@app.post("/logout")
+async def logout(response: Response):
+    response.delete_cookie(
+        key="auth_token",
+        httponly=True,
+        secure=True,  # False en desarrollo , poner True en Prod
+        samesite="strict" # Cambiar a "strict" en producción si es necesario
+    )
+    return {"message": "Logout exitoso"}
 
 #Periodos
 

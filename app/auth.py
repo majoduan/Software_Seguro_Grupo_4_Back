@@ -4,7 +4,7 @@ from typing import Optional
 from jose import jwt,JWTError
 from passlib.context import CryptContext
 from dotenv import load_dotenv
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request, Cookie, status
 
 from sqlalchemy.future import select
 from fastapi.security import OAuth2PasswordBearer
@@ -35,21 +35,49 @@ def crear_token_acceso(data: dict, expires_delta: Optional[timedelta] = None):
 
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    auth_token: Optional[str] = Cookie(None)  # 🔧 NUEVO: Obtener token de cookie
 ):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+   
+    # 🔧 NUEVO: Intentar obtener token de cookie primero, luego del header Authorization
+    token = auth_token
+    if not token:
+        authorization = request.headers.get("Authorization")
+        if authorization and authorization.startswith("Bearer "):
+            token = authorization.split(" ")[1]
+   
+    if not token:
+        raise credentials_exception
+   
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
         if user_id is None:
-            raise HTTPException(status_code=401, detail="Token inválido")
+            raise credentials_exception
     except JWTError:
-        raise HTTPException(status_code=401, detail="Token inválido")
-
-    # buscar el usuario por ID
+        raise credentials_exception
+    
+    # 🔧 CORRECCIÓN: Buscar el usuario por ID y verificar que existe
     result = await db.execute(select(Usuario).filter(Usuario.id_usuario == user_id))
     user = result.scalars().first()
-
-    if not user or not user.activo:
-        raise HTTPException(status_code=401, detail="Usuario no válido o inactivo")
-
+    
+    # 🔧 CORRECCIÓN: Validar que el usuario existe y está activo
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Usuario no encontrado"
+        )
+    
+    if not user.activo:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Usuario inactivo"
+        )
+    
     return user
