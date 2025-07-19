@@ -63,6 +63,7 @@ async def on_startup():
     await seed_all_data()
 
 
+# Modificar el endpoint /login
 @app.post("/login", response_model=schemas.Token)
 async def login(
     response: Response,
@@ -80,24 +81,24 @@ async def login(
     if not usuario.activo:
         raise HTTPException(status_code=403, detail="Usuario inactivo")
     
-    # Crear token
-    token = auth.crear_token_acceso(
-        data={"sub": str(usuario.id_usuario), "id_rol": str(usuario.id_rol)}
+    # 🔧 NUEVO: Crear token JWT cifrado
+    encrypted_token = auth.crear_token_cifrado(
+        data={"sub": str(usuario.id_usuario), "id_rol": str(usuario.id_rol)},
+        expires_delta=timedelta(days=7)
     )
    
-    # 🔧 Configurar cookie segura
+    # Configurar cookie segura con token cifrado
     response.set_cookie(
         key="auth_token",
-        value=token,
-        max_age=7 * 24 * 60 * 60,  # 7 días en segundos
-        httponly=True,  # No accesible desde JavaScript (más seguro)
-        secure=True,  # 🔧 DESARROLLO: True en producción para usar HTTPS
-        samesite="strict"  # 🔧 CAMBIAR: "strict" para prod y "lax" para dev
+        value=encrypted_token,  # ← Token JWT cifrado (ilegible)
+        max_age=7 * 24 * 60 * 60,
+        httponly=True,
+        secure=True,
+        samesite="strict"
     )
     
-    # 🔧 MANTENER: Schema original sin modificar
     return {
-        "access_token": "cookie_auth", # Indica que la autenticación se maneja con cookies
+        "access_token": "cookie_auth",  # Token dummy para respuesta
         "token_type": "bearer"
     }
 
@@ -151,15 +152,17 @@ async def register_user(user: schemas.UserCreate, db: AsyncSession = Depends(get
 
 #Limpiar cookie
 
+# Modificar el endpoint /logout
 @app.post("/logout")
 async def logout(response: Response):
     response.delete_cookie(
         key="auth_token",
         httponly=True,
-        secure=True,  # False en desarrollo , poner True en Prod
-        samesite="strict" # Cambiar a "strict" en producción si es necesario
+        secure=True,
+        samesite="strict"
     )
     return {"message": "Logout exitoso"}
+
 
 #Periodos
 
