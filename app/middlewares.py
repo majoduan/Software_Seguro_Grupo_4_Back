@@ -6,7 +6,7 @@ def add_middlewares(app: FastAPI) -> None:
         # "http://localhost:5173",
         # "http://localhost:3000" # URLs del frontend
         #"*"
-        "https://software-seguro-grupo-4-front.vercel.app/"
+        "https://software-seguro-grupo-4-front.vercel.app"
     ]
 #TODO: Cambiar los headers y metodos permitidos
     app.add_middleware(
