@@ -30,7 +30,23 @@ from reportlab.lib.styles import ParagraphStyle
 import unicodedata
 from sqlalchemy.orm import selectinload
 
+"""Inicializar el contexto de hashing de contraseñas
+Objetivo:
+    Configurar un contexto seguro para el almacenamiento de contraseñas utilizando el 
+    algoritmo bcrypt,garantizando que las contraseñas se almacenen de forma cifrada y no reversible.
 
+Parámetros:
+    schemes (list): Lista de algoritmos de hashing permitidos. En este caso, solo 'bcrypt'.
+    deprecated (str): Define cómo manejar algoritmos obsoletos. 'auto' utiliza el algoritmo 
+    más seguro disponible.
+
+Operación:
+    - Crea una instancia de CryptContext para hashear y verificar contraseñas.
+    - Se utiliza posteriormente en los procesos de registro y autenticación.
+
+Retorna:
+    - CryptContext: Objeto utilizado para operaciones de hash y verificación de contraseñas.
+"""
 # Initialize the password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -67,7 +83,26 @@ async def on_startup():
     print("Insertando roles iniciales...")
     await seed_all_data()
 
+# Endpoint de inicio de sesión (autenticación con token JWT cifrado)
+"""Autenticar usuario y generar token JWT cifrado (login)
+Objetivo:
+    Validar las credenciales del usuario, verificar su estado y generar un token JWT
+    cifrado para su uso en autenticación basada en cookies seguras.
 
+Parámetros:
+    response (Response): Objeto de respuesta HTTP donde se insertará la cookie.
+    form_data (OAuth2PasswordRequestForm): Datos del formulario con username (email) y password.
+    db (AsyncSession): Conexión a la base de datos para obtener datos del usuario.
+
+Operación:
+    - Verifica si el usuario existe y si la contraseña ingresada coincide con el hash almacenado.
+    - Verifica si el usuario está activo.
+    - Genera un token JWT cifrado con identificadores del usuario.
+    - Inserta el token en una cookie segura (httponly, secure, samesite).
+
+Retorna:
+    - dict: Respuesta con un token dummy. El token real es enviado por cookie segura.
+"""
 # Modificar el endpoint /login
 @app.post("/login", response_model=schemas.Token)
 async def login(
@@ -109,6 +144,27 @@ async def login(
     }
 
 #Usar para validar el usuario
+"""Autenticación de usuario mediante dependencia
+
+    Objetivo:
+        Garantizar que solo usuarios autenticados puedan acceder a las rutas protegidas del sistema.
+        Esta dependencia utiliza el token JWT previamente generado y almacenado en el encabezado 
+        Authorization para validar la identidad del usuario que realiza la petición.
+
+    Parámetros:
+        Ninguno explícito en la función — se invoca automáticamente mediante `Depends`.
+
+    Operación:
+        - Extrae el token JWT del encabezado de la solicitud.
+        - Verifica su validez y decodifica el contenido.
+        - Recupera la información del usuario desde la base de datos utilizando el identificador
+        extraído del token.
+        - Devuelve una instancia del usuario autenticado para su uso dentro de la ruta protegida.
+
+    Retorna:
+        - models.Usuario: Objeto del usuario autenticado.
+"""
+
 @app.get("/perfil")
 async def perfil_usuario(
     usuario: models.Usuario = Depends(get_current_user),
@@ -133,6 +189,24 @@ async def perfil_usuario(
         "activo": usuario.activo
     }
 
+#Registro de usuarios con contraseña hasheada
+"""Registrar nuevo usuario con almacenamiento seguro de contraseña
+Objetivo:
+    Crear un nuevo usuario en la base de datos asegurando que su contraseña se almacene 
+    mediante un algoritmo de hash seguro.
+
+Parámetros:
+    user (schemas.UserCreate): Objeto con los datos del nuevo usuario incluyendo la contraseña.
+    db (AsyncSession): Conexión a la base de datos para insertar el nuevo usuario.
+
+Operación:
+    - Verifica si ya existe un usuario con el mismo correo.
+    - Aplica hashing a la contraseña usando bcrypt antes de almacenarla.
+    - Inserta el nuevo usuario con la contraseña hasheada en la base de datos.
+
+Retorna:
+    - Usuario creado, con la información definida en el esquema de salida.
+"""
 @app.post("/register", response_model=schemas.UserOut)
 async def register_user(user: schemas.UserCreate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -158,6 +232,21 @@ async def register_user(user: schemas.UserCreate, db: AsyncSession = Depends(get
 
 #Limpiar cookie
 
+# Endpoint de cierre de sesión (logout)
+"""Cerrar sesión eliminando cookie de autenticación segura
+Objetivo:
+    Eliminar la cookie que contiene el token JWT cifrado para invalidar la sesión del usuario.
+
+Parámetros:
+    response (Response): Objeto de respuesta HTTP donde se eliminará la cookie.
+
+Operación:
+    - Llama a delete_cookie sobre la clave 'auth_token' con las mismas condiciones de seguridad
+    usadas en la creación.
+
+Retorna:
+    - dict: Mensaje de confirmación de cierre de sesión.
+"""
 # Modificar el endpoint /logout
 @app.post("/logout")
 async def logout(response: Response):
@@ -546,6 +635,24 @@ async def editar_proyecto(
         raise HTTPException(status_code=404, detail="Proyecto no encontrado")
 
     # Validar que el usuario sea el director del proyecto
+    """Control de acceso a recursos según propiedad del usuario
+
+    Objetivo:
+        Restringir el acceso a un proyecto únicamente a su director o responsable autorizado.
+        Se busca evitar que usuarios accedan a información que no les pertenece.
+
+    Parámetros:
+        usuario (models.Usuario): Usuario autenticado que realiza la petición.
+        proyecto (models.Proyecto): Proyecto consultado desde la base de datos.
+
+    Operación:
+        - Compara el identificador del usuario autenticado con el del director del proyecto.
+        - En caso de discrepancia, lanza una excepción de acceso no autorizado.
+
+    Retorna:
+        - HTTPException 403 en caso de intento de acceso no autorizado.
+    """
+    
     # if proyecto.id_director_proyecto != usuario.id_usuario:
     #     raise HTTPException(status_code=403, detail="Solo el director del proyecto puede editarlo")
 
@@ -721,6 +828,30 @@ async def eliminar_tarea(id_tarea: uuid.UUID, db: AsyncSession = Depends(get_db)
     return {"msg": "Tarea eliminada correctamente"}
 
 
+"""Registro de modificaciones críticas en tareas 
+
+    Objetivo:
+        Mantener un historial de cambios realizados sobre los campos económicos de una tarea.
+        Esta auditoría permite garantizar trazabilidad y verificar la integridad de los datos 
+        ante cambios.
+
+    Parámetros:
+        usuario (models.Usuario): Usuario autenticado que realiza la modificación.
+        campos_auditar (list[str]): Lista de campos sensibles que serán monitoreados.
+        data (schemas.TareaUpdate): Datos nuevos provistos por el usuario.
+
+    Operación:
+        - Compara los valores antiguos con los nuevos para cada campo monitoreado.
+        - Si hay diferencias, se registra un nuevo objeto en `HistoricoPoa`, incluyendo:
+            • campo modificado,
+            • valor anterior y nuevo,
+            • justificación del cambio,
+            • usuario responsable y timestamp.
+
+    Retorna:
+        - dict: Mensaje de confirmación y detalle de la tarea actualizada.
+"""
+
 @app.put("/tareas/{id_tarea}")
 async def editar_tarea(
     id_tarea: uuid.UUID, 
@@ -873,6 +1004,23 @@ async def crear_reforma_poa(
         proyecto = result.scalars().first()
         if proyecto:
             proyecto_nombre = proyecto.titulo
+
+    """Validación de identidad del solicitante de reforma
+
+    Objetivo:
+        Asegurar que el usuario que solicita una reforma presupuestaria esté registrado y
+        autorizado en el sistema.
+
+    Parámetros:
+        usuario (models.Usuario): Usuario autenticado que realiza la solicitud.
+
+    Operación:
+        - Consulta en la base de datos si el ID del usuario autenticado existe.
+        - Si no se encuentra, se lanza una excepción HTTP 403.
+
+    Retorna:
+        - HTTPException 403: En caso de que el usuario no sea válido.
+    """
 
     # Validar que el usuario solicitante exista
     result = await db.execute(select(models.Usuario).where(models.Usuario.id_usuario == usuario.id_usuario))
@@ -1122,6 +1270,26 @@ async def transformar_archivo_excel(
     confirmacion: bool = Form(False),  # Confirmación del frontend
     usuario: models.Usuario = Depends(get_current_user)
 ):
+    """Validación de seguridad sobre archivos de entrada
+
+    Objetivo:
+        Evitar el procesamiento de archivos no permitidos que puedan comprometer la
+        integridad del sistema, mediante una validación estricta de formato.
+
+    Parámetros:
+        file (UploadFile): Archivo enviado desde el cliente.
+        hoja (str): Nombre de la hoja a procesar dentro del archivo Excel.
+
+    Operación:
+        - Revisa la extensión del archivo, permitiendo únicamente `.xls` y `.xlsx`.
+        - Lanza una excepción HTTP 400 si el formato no es válido.
+        - Permite el procesamiento solo si el archivo cumple con las condiciones definidas.
+
+    Retorna:
+        - HTTPException 400: Si el archivo tiene formato no soportado.
+        - JSON: Resultado de la transformación si es válido.
+    """
+
     # Validar que el archivo tenga una extensión válida
     if not file.filename.endswith((".xls", ".xlsx")):
         raise HTTPException(status_code=400, detail="Archivo no soportado")
