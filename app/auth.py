@@ -39,8 +39,12 @@ if not ENCRYPTION_KEY:
 cipher_suite = Fernet(ENCRYPTION_KEY.encode() if isinstance(ENCRYPTION_KEY, str) else ENCRYPTION_KEY)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-bcrypt__rounds=12
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto",
+    bcrypt__rounds=12
+)
+
 
 def verificar_password(hash_sha256: str, hash_guardado_bcrypt: str):
     return pwd_context.verify(hash_sha256, hash_guardado_bcrypt)
