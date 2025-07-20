@@ -16,19 +16,26 @@ import secrets
 
 load_dotenv()
 
+
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60))
 
-# 🔧 NUEVO: Clave de cifrado para tokens
+# 🔧 AGREGAR ESTAS LÍNEAS:
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
+COOKIE_HTTPONLY = os.getenv("COOKIE_HTTPONLY", "true").lower() == "true"
+COOKIE_SAMESITE = os.getenv("COOKIE_SAMESITE", "lax")
+
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
-if not ENCRYPTION_KEY:
-    # Generar una clave si no existe (solo para desarrollo)
-    ENCRYPTION_KEY = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
-    print(f"⚠️  ENCRYPTION_KEY generada automáticamente: {ENCRYPTION_KEY}")
-    print("🔧 Añádela a tus variables de entorno para producción")
+
+#🔧 NUEVO: Clave de cifrado para tokens
+
 
 # Inicializar cipher con la clave
+if not ENCRYPTION_KEY:
+    raise ValueError("ENCRYPTION_KEY no está configurada en las variables de entorno")
+
+# Ahora podemos usar la clave con seguridad
 cipher_suite = Fernet(ENCRYPTION_KEY.encode() if isinstance(ENCRYPTION_KEY, str) else ENCRYPTION_KEY)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
