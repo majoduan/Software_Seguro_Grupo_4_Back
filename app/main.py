@@ -94,7 +94,7 @@ async def login(
         max_age=7 * 24 * 60 * 60,
         httponly=True,
         secure=True,
-        samesite="none"
+        samesite="strict"
     )
     
     return {
@@ -159,7 +159,7 @@ async def logout(response: Response):
         key="auth_token",
         httponly=True,
         secure=True,
-        samesite="none"
+        samesite="strict"
     )
     return {"message": "Logout exitoso"}
 
