@@ -99,7 +99,8 @@ async def login(
         max_age=7 * 24 * 60 * 60,
         httponly=COOKIE_HTTPONLY,
         secure=COOKIE_SECURE,
-        samesite=COOKIE_SAMESITE if COOKIE_SAMESITE in ("lax", "strict", "none") else "lax"
+        # samesite=COOKIE_SAMESITE if COOKIE_SAMESITE in ("lax", "strict", "none") else "lax"
+        samesite="none"
     )
     
     return {
@@ -164,7 +165,8 @@ async def logout(response: Response):
         key="auth_token",
         httponly=COOKIE_HTTPONLY,
         secure=COOKIE_SECURE,
-        samesite=COOKIE_SAMESITE if COOKIE_SAMESITE in ("lax", "strict", "none") else "lax"
+        # samesite=COOKIE_SAMESITE if COOKIE_SAMESITE in ("lax", "strict", "none") else "lax"
+        samesite="none"
     )
     return {"message": "Logout exitoso"}
 
