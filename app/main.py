@@ -8,7 +8,7 @@ from app import models, schemas, auth
 from app.database import engine, get_db
 from app.middlewares import add_middlewares
 from app.scripts.init_data import seed_all_data
-from app.auth import get_current_user
+from app.auth import COOKIE_SECURE, COOKIE_SAMESITE, COOKIE_HTTPONLY, get_current_user 
 from passlib.context import CryptContext
 import uuid
 from typing import List
@@ -29,6 +29,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.styles import ParagraphStyle
 import unicodedata
 from sqlalchemy.orm import selectinload
+
 
 # Initialize the password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -92,9 +93,9 @@ async def login(
         key="auth_token",
         value=encrypted_token,  # ← Token JWT cifrado (ilegible)
         max_age=7 * 24 * 60 * 60,
-        httponly=True,
-        secure=True,
-        samesite="strict"
+        httponly=COOKIE_HTTPONLY,
+        secure=COOKIE_SECURE,
+        samesite=COOKIE_SAMESITE if COOKIE_SAMESITE in ("lax", "strict", "none") else "lax"
     )
     
     return {
@@ -157,9 +158,9 @@ async def register_user(user: schemas.UserCreate, db: AsyncSession = Depends(get
 async def logout(response: Response):
     response.delete_cookie(
         key="auth_token",
-        httponly=True,
-        secure=True,
-        samesite="strict"
+        httponly=COOKIE_HTTPONLY,
+        secure=COOKIE_SECURE,
+        samesite=COOKIE_SAMESITE if COOKIE_SAMESITE in ("lax", "strict", "none") else "lax"
     )
     return {"message": "Logout exitoso"}
 
