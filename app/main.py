@@ -53,6 +53,10 @@ def normalizar_texto(texto):
     texto = texto.strip()                     # Quita espacios al inicio y final
     return texto
 
+@app.get("/")
+async def root():
+    return {"message": "Backend activo en Render"}
+
 @app.on_event("startup")
 async def on_startup():
 
