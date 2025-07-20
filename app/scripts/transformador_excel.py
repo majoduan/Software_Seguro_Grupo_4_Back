@@ -8,6 +8,31 @@ from datetime import datetime
 
 
 def transformar_excel(file_bytes: bytes, hoja: str):
+    """
+    Transforma un archivo de Excel en un DataFrame validando estructura y datos críticos
+
+    Objetivo:
+        Procesar un archivo Excel recibido como bytes, extrayendo actividades y tareas 
+        presupuestarias, garantizando la validez de los datos para prevenir inconsistencias 
+        o corrupción en el sistema.
+
+    Parámetros:
+        file_bytes (bytes): Contenido del archivo Excel en memoria.
+        hoja (str): Nombre de la hoja que se desea procesar.
+
+    Operación:
+        - Verifica que la hoja especificada exista.
+        - Detecta encabezados esperados y valida su estructura.
+        - Valida que las actividades estén numeradas secuencialmente.
+        - Verifica que los valores numéricos (cantidad, precio, total) sean válidos.
+        - Lanza errores detallados si se encuentran anomalías en la estructura o valores.
+        - Construye un diccionario JSON con la información organizada y segura para insertar 
+        en la base de datos.
+
+    Retorna:
+        dict: Diccionario JSON con los datos transformados para registrar actividades y tareas.
+    
+    """
     # Cargar el archivo Excel
     excel_file = pd.ExcelFile(BytesIO(file_bytes))
     
@@ -202,17 +227,28 @@ def detectar_total_por_actividad(df, fila):
 
 def validar_fila_encabezados(df, fila, col_inicio, col_excluir):
     """
-    Valida los encabezados en una fila específica del DataFrame.
+    Validar estructura de encabezados en una fila específica del DataFrame.
     Lanza errores si hay encabezados duplicados, faltantes o inválidos.
-    
+
+    Objetivo:
+        Verificar que los encabezados requeridos estén presentes, únicos y sin duplicaciones 
+        en la fila del Excel.
+
     Parámetros:
         df (pd.DataFrame): El DataFrame que contiene los datos.
         fila (int): Índice de la fila donde están los encabezados.
         col_inicio (int): Columna desde donde se debe comenzar la validación.
         col_excluir (int): Columna que no se debe validar.
-    
+
+    Operación:
+        - Busca y valida columnas esenciales como 'CANTIDAD', 'TOTAL', 'ITEM PRESUPUESTARIO', etc.
+        - Detecta encabezados duplicados o faltantes.
+        - Verifica que existan 12 columnas de fechas distintas (una por mes).
+        - Lanza errores si la estructura del archivo no cumple el formato esperado.
+
     Retorna:
         dict: Un diccionario con los índices de las columnas encontradas para cada encabezado.
+
     """
     # Encabezados requeridos
     encabezados_requeridos = {
@@ -292,7 +328,15 @@ def validar_fila_encabezados(df, fila, col_inicio, col_excluir):
     return columnas_encontradas  # Retorna las columnas encontradas con sus índices
 
 def es_fecha(valor):
-    """Verifica si un valor es una fecha válida en formatos esperados."""
+    """Verifica si un valor es una fecha válida en formatos esperados.
+    Parámetros:
+        valor (str): Valor a verificar.
+
+    Operación:
+        - Intenta convertir el valor usando varios formatos de fecha aceptados.
+
+    Retorna:
+        bool: True si el valor es una fecha válida, False en caso contrario."""
     formatos_validos = ["%Y-%m-%d", "%d/%m/%Y", "%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S"]  # Formatos aceptados
     for formato in formatos_validos:
         try:
@@ -303,6 +347,22 @@ def es_fecha(valor):
     return False
 
 def es_numero(val):
+    """
+    Verifica si un valor es un número  numérico
+
+    Objetivo:
+        Validar que una cadena o valor pueda convertirse en número (float).
+
+    Parámetros:
+        val (any): Valor a evaluar.
+
+    Operación:
+        - Intenta convertir el valor a tipo float.
+
+    Retorna:
+        bool: True si es un número válido, False en caso contrario.
+
+    """
     try:
         float(val)
         return True

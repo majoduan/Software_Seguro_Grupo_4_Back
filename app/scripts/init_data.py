@@ -1,3 +1,6 @@
+"""Se encarga de llenar la base de datos con datos iniciales necesarios 
+para el funcionamiento del sistema.     
+"""
 import uuid
 from app.database import SessionLocal
 from app.models import (
@@ -19,10 +22,26 @@ from sqlalchemy import and_
 
 # Esta función sirve para llenar la base de datos con datos iniciales
 async def seed_all_data():
+    
     async with SessionLocal() as db:
         """
-        Llenar roles deseados
+        Se encarga de llenar la base de datos con datos iniciales necesarios
+        Crear roles base del sistema
+        Objetivo:
+            Establecer los roles base del sistema, los cuales se utilizarán para controlar 
+            el acceso a distintas funcionalidades según el tipo de usuario.
+
+        Parámetros:
+            Ninguno explícito. Utiliza una lista interna de roles predeterminados.
+
+        Operación:
+            - Consulta los roles ya existentes en la base de datos.
+            - Compara con los roles deseados.
+            - Inserta solo los que no existen aún.
+
+        Retorna:None
         """
+   
         # Verificar roles existentes
         result = await db.execute(select(Rol.nombre_rol))
         roles_existentes = set(result.scalars().all())
@@ -43,8 +62,25 @@ async def seed_all_data():
             db.add_all(nuevos_roles)
 
         """
-        Llenar permisos deseados
+        Crear permisos del sistema
+
+        Objetivo:
+            Definir los permisos del sistema necesarios para aplicar un control de acceso 
+            granular sobre las funcionalidades (crear, leer, actualizar, eliminar) en módulos
+            como Proyectos, POA, Presupuesto, etc.
+
+        Parámetros:
+            Ninguno explícito. Utiliza una lista interna de permisos predefinidos.
+
+        Operación:
+            - Consulta los códigos de permisos ya existentes.
+            - Compara con los permisos deseados.
+            - Inserta en la base de datos los nuevos permisos que no existan.
+
+        Retorna:
+            None
         """
+
         # Verificar permisos existentes
         result = await db.execute(select(Permiso.codigo_permiso))
         codigos_existentes = set(result.scalars().all())
@@ -78,8 +114,23 @@ async def seed_all_data():
         await db.commit()  # Importante antes de buscar datos recién insertados
 
         """
-        Asignar permisos al rol "Administrador"
-        Se le asignaron todos los permisos al rol "Administrador" para que tenga acceso completo al sistema.
+        Asignar todos los permisos al rol Administrador
+
+        Objetivo:
+            Garantizar que el rol "Administrador" tenga acceso completo a todas las funcionalidades
+            del sistema, como medida para la administración general del mismo.
+
+        Parámetros:
+            Ninguno explícito. Recupera datos desde la base.
+
+        Operación:
+            - Obtiene el rol con nombre "Administrador".
+            - Recupera todos los permisos del sistema.
+            - Verifica qué combinaciones de permisos ya están asignadas al rol.
+            - Asigna todos los permisos faltantes.
+
+        Retorna:None
+
         """
 
         # Obtener el rol "Administrador"

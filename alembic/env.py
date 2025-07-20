@@ -6,6 +6,10 @@ import os
 import sys
 
 # Cargar variables del .env
+""""Cargar las variables de entorno desde el archivo .env para la configuración de la base 
+de datos.Esto permite que Alembic use las credenciales y la URL de conexión definidas en el 
+archivo .env."""
+
 load_dotenv()
 
 # Configuración de Alembic
@@ -16,6 +20,10 @@ fileConfig(config.config_file_name)
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Importar Base y modelos
+"""Importar la clase Base y los modelos de la aplicación para que Alembic pueda acceder 
+a ellos.Esto es necesario para que Alembic pueda generar las migraciones basadas en los 
+modelos definidos."""
+
 from app.database import Base
 from app.models import (
     TipoPOA,
