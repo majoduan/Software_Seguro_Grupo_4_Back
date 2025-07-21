@@ -218,6 +218,23 @@ class ProgramacionMensual(Base):
 
 
 class Permiso(Base):
+    """
+     Objetivo:
+        Definir una acción específica permitida dentro de un módulo determinado del sistema, 
+        permitiendo granularidad en la gestión de autorizaciones.
+
+    Parámetros:
+        - codigo_permiso (String): Código único del permiso (e.g., "EDITAR_USUARIO").
+        - modulo (String): Módulo o área funcional sobre la cual se aplica el permiso.
+        - accion (String): Acción concreta que se autoriza (e.g., "crear", "eliminar").
+
+    Operación:
+        - Relacionado con múltiples roles mediante la tabla intermedia PermisoRol.
+        - Consultado durante validaciones de autorización en tiempo de ejecución.
+
+    Retorna:
+        - Permiso: Instancia del modelo que describe derechos de acceso específicos.
+    """
     __tablename__ = "PERMISO"
 
     id_permiso = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -229,6 +246,25 @@ class Permiso(Base):
     roles = relationship("PermisoRol", back_populates="permiso")
 
 class PermisoRol(Base):
+    
+    """
+    Objetivo:
+        Asociar roles a permisos específicos, conformando una implementación flexible
+        de control de acceso basado en roles.
+
+    Parámetros:
+        - id_rol (UUID): Identificador del rol asociado.
+        - id_permiso (UUID): Identificador del permiso correspondiente.
+
+    Operación:
+        - Establece relaciones muchos-a-muchos entre los modelos Rol y Permiso.
+        - Evaluado durante las verificaciones de acceso para determinar si un usuario 
+        tiene autorización.
+
+    Retorna:
+        - PermisoRol: Asociación entre un rol y un permiso específico.
+    """
+
     __tablename__ = "PERMISO_ROL"
 
     id_permiso_rol = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -293,6 +329,28 @@ class EjecucionPresupuestaria(Base):
     control_presupuestario = relationship("ControlPresupuestario")
 
 class HistoricoProyecto(Base):
+    
+    """
+    Objetivo:
+        Registrar de forma persistente las modificaciones realizadas sobre proyectos, 
+        incluyendo detalles del campo alterado, valores anteriores y nuevos, usuario
+        responsable y justificación.
+
+    Parámetros:
+        - campo_modificado (String): Nombre del atributo que fue modificado.
+        - valor_anterior / valor_nuevo (Text): Valores antes y después del cambio.
+        - justificacion (String): Motivo documentado del cambio.
+        - id_usuario (UUID): Usuario responsable del cambio.
+
+    Operación:
+        - Cada modificación se almacena como un nuevo registro histórico.
+        - Permite trazabilidad completa sobre acciones sensibles o críticas.
+
+    Retorna:
+        - HistoricoProyecto: Entrada individual de auditoría aplicable a análisis forense
+        o cumplimiento normativo.
+    """
+
     __tablename__ = "HISTORICO_PROYECTO"
 
     id_historico = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -308,6 +366,27 @@ class HistoricoProyecto(Base):
     usuario = relationship("Usuario")
 
 class HistoricoPoa(Base):
+    """
+    Objetivo:
+        Documentar los cambios realizados sobre instancias del POA, incluyendo la relación
+        con reformas, usuarios responsables, campos afectados y justificación.
+
+    Parámetros:
+        - id_poa (UUID): Identificador del POA afectado.
+        - campo_modificado (String): Campo modificado en el POA.
+        - valor_anterior / valor_nuevo (Text): Datos previos y actualizados.
+        - justificacion (String): Motivo del cambio.
+        - id_usuario (UUID): Usuario que realizó la modificación.
+        - id_reforma (UUID): Reforma asociada, en caso de existir.
+
+    Operación:
+        - Registra cada cambio relevante en una tabla dedicada a trazabilidad.
+        - Permite análisis histórico, control de versiones y auditorías externas.
+
+    Retorna:
+        - HistoricoPoa: Registro de auditoría vinculado a un POA y una acción específica.
+    """
+
     __tablename__ = "HISTORICO_POA"
 
     id_historico = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
