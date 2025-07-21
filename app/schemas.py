@@ -5,16 +5,81 @@ from datetime import date, datetime
 from typing import Optional,List,Annotated
 
 class Token(BaseModel):
+    """
+    Token de autenticación
+
+    Objetivo:
+        Representar la estructura del token de acceso utilizado en los mecanismos de autenticación 
+        basados en JWT u otros esquemas, permitiendo la validación y autorización de usuarios en 
+        las operaciones protegidas del sistema.
+
+    Parámetros:
+        - access_token (str): Cadena codificada que representa el token de acceso.
+        - token_type (str): Tipo del token, comúnmente 'bearer'.
+
+    Operación:
+        - Almacena temporalmente el token que se retorna al usuario autenticado.
+        - Utilizado en encabezados HTTP para la autenticación de solicitudes.
+
+    Retorna:
+        - Instancia del modelo `Token`, que contiene la información de autenticación del usuario.
+    """
+
     access_token: str
     token_type: str
 
 class UserCreate(BaseModel):
+    """
+    Modelo para la creación de usuarios
+
+    Objetivo:
+        Capturar la información necesaria para el registro de nuevos usuarios, incluyendo 
+        credenciales y asignación de roles, garantizando la integridad de los datos mediante 
+        validaciones.
+
+    Parámetros:
+        - nombre_usuario (str): Nombre identificador del usuario.
+        - email (str): Correo electrónico único para el usuario.
+        - password (str): Contraseña en texto plano que será procesada y almacenada de forma segura.
+        - id_rol (UUID): Identificador del rol asociado al nuevo usuario.
+
+    Operación:
+        - Este modelo es utilizado en los endpoints de registro de usuarios.
+        - La contraseña debe ser procesada (hasheada) antes de su almacenamiento en base de datos.
+
+    Retorna:
+        - Instancia de `UserCreate` con los datos ingresados para su posterior procesamiento.
+    """
+
     nombre_usuario: str
     email: str
     password: str
     id_rol: UUID
 
 class UserOut(BaseModel):
+    """
+    Modelo de salida para información de usuario
+
+    Objetivo:
+        Estructurar los datos del usuario que pueden ser retornados al cliente, 
+        excluyendo la contraseña u otros campos sensibles, para preservar la privacidad
+        y seguridad de la información.
+
+    Parámetros:
+        - id_usuario (UUID): Identificador único del usuario.
+        - nombre_usuario (str): Nombre identificador del usuario.
+        - email (str): Correo electrónico del usuario.
+        - id_rol (UUID): Identificador del rol asignado.
+        - activo (bool): Estado del usuario (activo o inactivo).
+
+    Operación:
+        - Utilizado como respuesta en endpoints de consulta de usuarios.
+        - Previene la exposición de contraseñas u otros datos críticos.
+
+    Retorna:
+        - Instancia de `UserOut` con los campos no sensibles del usuario.
+    """
+
     id_usuario: UUID
     nombre_usuario: str
     email: str
@@ -217,6 +282,27 @@ class TareaUpdate(BaseModel):
 
 #reformas
 class ReformaPoaBase(BaseModel):
+    """
+    Modelo base para reformas de POA
+
+    Objetivo:
+        Estructurar la solicitud de una reforma financiera sobre un POA, incluyendo
+        validación de montos y justificaciones, de modo que se preserve la trazabilidad 
+        y el control del flujo presupuestario.
+
+    Parámetros:
+        - id_poa (UUID): Identificador del POA a reformar.
+        - monto_solicitado (Decimal): Valor de la reforma solicitado, validado como mayor que cero.
+        - justificacion (str): Justificación detallada que respalda la solicitud de reforma.
+
+    Operación:
+        - Garantiza integridad mediante validaciones.
+        - Se utiliza en flujos donde se requiere autorización administrativa.
+
+    Retorna:
+        - Instancia de `ReformaPoaBase` lista para ser validada o almacenada.
+    """
+
     id_poa: UUID
     monto_solicitado: condecimal(gt=0)
     justificacion: constr(min_length=10, max_length=500)
