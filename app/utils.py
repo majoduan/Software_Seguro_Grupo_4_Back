@@ -3,6 +3,28 @@ from app import models
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+"""
+Eliminar tareas y actividades asociadas a un POA
+
+Objetivo:
+    Eliminar de forma asincrónica todas las tareas y actividades vinculadas a un POA específico,
+    garantizando la integridad referencial al eliminar primero las dependencias (tareas) antes de
+    su entidad superior (actividad).
+
+Parámetros:
+    - id_poa (UUID): Identificador único del POA cuyas actividades y tareas serán eliminadas.
+    - db (AsyncSession): Sesión de base de datos asincrónica utilizada para realizar las operaciones.
+
+Operación:
+    - Consulta todas las actividades relacionadas con el POA proporcionado.
+    - Para cada actividad, consulta y elimina sus tareas asociadas.
+    - Posteriormente, elimina la actividad.
+    - Confirma los cambios utilizando `db.commit()` para hacer persistente la eliminación.
+
+Retorna:
+    - None. La función no retorna valores, pero modifica el estado de la base de datos de 
+    forma permanente.
+"""
 
 async def eliminar_tareas_y_actividades(id_poa: uuid.UUID, db: AsyncSession):
     """
