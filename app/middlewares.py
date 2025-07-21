@@ -100,6 +100,9 @@ def add_middlewares(app: FastAPI) -> None:
         
         # Headers de seguridad HTTPS
         response.headers.update({
+            "Cache-Control": "no-store, no-cache, must-revalidate, private, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
             "X-Frame-Options": "DENY",
             "X-Content-Type-Options": "nosniff",
             "X-XSS-Protection": "1; mode=block", 

@@ -1497,7 +1497,6 @@ async def transformar_archivo_excel(
         raise HTTPException(status_code=400, detail=str(e))
 
     except Exception as e:
-        print(f"Error inesperado en /transformar_excel/: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     
 @app.get("/item-presupuestario/{id_item}", response_model=schemas.ItemPresupuestarioOut)
@@ -1505,7 +1504,6 @@ async def get_item_presupuestario(
     id_item: uuid.UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    print(f"ID Item: {id_item}")
     result = await db.execute(select(models.ItemPresupuestario).where(models.ItemPresupuestario.id_item_presupuestario == id_item))
     item = result.scalars().first()
     if not item:
@@ -1845,7 +1843,6 @@ async def obtener_logs_carga_excel(
             })
         return respuesta
     except Exception as e:
-        print("Error en logs-carga-excel:", e)
         return JSONResponse(content={"error": str(e)}, status_code=500)
     
 # programacion mensual
