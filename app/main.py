@@ -848,7 +848,6 @@ async def eliminar_tarea(id_tarea: uuid.UUID, db: AsyncSession = Depends(get_db)
     Retorna:
         - dict: Mensaje de confirmación y detalle de la tarea actualizada.
 """
-
 @app.put("/tareas/{id_tarea}")
 async def editar_tarea(
     id_tarea: uuid.UUID,
@@ -875,6 +874,9 @@ async def editar_tarea(
             raise HTTPException(status_code=404, detail="Actividad no encontrada")
  
         id_poa = actividad.id_poa
+        
+        # Guardar el total anterior de la tarea para restarlo de la actividad
+        total_anterior = tarea.total
  
         # Campos a auditar
         campos_auditar = ["cantidad", "precio_unitario", "lineaPaiViiv"]
@@ -900,6 +902,20 @@ async def editar_tarea(
                 )
                 db.add(historico)
                 setattr(tarea, campo, valor_nuevo)
+        
+        # Recalcular el total de la tarea después de las actualizaciones
+        cantidad = tarea.cantidad or Decimal("0")
+        precio_unitario = tarea.precio_unitario or Decimal("0")
+        nuevo_total = precio_unitario * cantidad
+        
+        # Actualizar el total y saldo_disponible de la tarea
+        tarea.total = nuevo_total
+        tarea.saldo_disponible = nuevo_total  # Asumiendo que el saldo disponible se resetea al nuevo total
+        
+        # Actualizar los montos en la actividad
+        # Restar el total anterior y sumar el nuevo total
+        actividad.total_por_actividad = actividad.total_por_actividad - total_anterior + nuevo_total
+        actividad.saldo_actividad = actividad.saldo_actividad - total_anterior + nuevo_total
  
         await db.commit()
         await db.refresh(tarea)
@@ -909,7 +925,6 @@ async def editar_tarea(
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail="Error interno al editar la tarea")
-
 
 #detalles tarea por poa
 @app.get("/poas/{id_poa}/detalles_tarea", response_model=List[schemas.DetalleTareaOut])
