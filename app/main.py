@@ -875,8 +875,10 @@ async def editar_tarea(
  
         id_poa = actividad.id_poa
         
-        # Guardar el total anterior de la tarea para restarlo de la actividad
-        total_anterior = tarea.total
+        # Guardar valores anteriores para cálculos y auditoría
+        total_anterior = tarea.total or Decimal("0")
+        cantidad_anterior = tarea.cantidad or Decimal("0")
+        precio_anterior = tarea.precio_unitario or Decimal("0")
  
         # Campos a auditar
         campos_auditar = ["cantidad", "precio_unitario", "lineaPaiViiv"]
@@ -913,9 +915,15 @@ async def editar_tarea(
         tarea.saldo_disponible = nuevo_total  # Asumiendo que el saldo disponible se resetea al nuevo total
         
         # Actualizar los montos en la actividad
-        # Restar el total anterior y sumar el nuevo total
-        actividad.total_por_actividad = actividad.total_por_actividad - total_anterior + nuevo_total
-        actividad.saldo_actividad = actividad.saldo_actividad - total_anterior + nuevo_total
+        # Validar que los valores de la actividad no sean None
+        actividad.total_por_actividad = (actividad.total_por_actividad or Decimal("0")) - total_anterior + nuevo_total
+        actividad.saldo_actividad = (actividad.saldo_actividad or Decimal("0")) - total_anterior + nuevo_total
+        
+        # Validar que los totales no queden negativos
+        if actividad.total_por_actividad < 0:
+            actividad.total_por_actividad = Decimal("0")
+        if actividad.saldo_actividad < 0:
+            actividad.saldo_actividad = Decimal("0")
  
         await db.commit()
         await db.refresh(tarea)
