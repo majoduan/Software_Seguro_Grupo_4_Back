@@ -131,7 +131,7 @@ async def login(
     response.set_cookie(
         key="auth_token",
         value=encrypted_token,  # ← Token JWT cifrado (ilegible)
-        max_age=7 * 24 * 60 * 60,
+        max_age=3600,
         httponly=COOKIE_HTTPONLY,
         secure=COOKIE_SECURE,
         # samesite=COOKIE_SAMESITE if COOKIE_SAMESITE in ("lax", "strict", "none") else "lax"
@@ -1932,3 +1932,106 @@ async def obtener_programacion_por_tarea(
         select(models.ProgramacionMensual).where(models.ProgramacionMensual.id_tarea == id_tarea)
     )
     return result.scalars().all()
+
+@app.delete("/tareas/{id_tarea}/programacion-mensual")
+async def eliminar_programacion_mensual_tarea(
+    id_tarea: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    """Eliminar toda la programación mensual de una tarea específica
+    
+    Objetivo:
+        Eliminar todos los registros de programación mensual asociados a una tarea,
+        manteniendo la trazabilidad y verificando permisos del usuario.
+    
+    Parámetros:
+        id_tarea (uuid.UUID): Identificador único de la tarea.
+        db (AsyncSession): Conexión a la base de datos.
+        usuario (models.Usuario): Usuario autenticado que realiza la operación.
+    
+    Operación:
+        - Verifica que la tarea exista en la base de datos.
+        - Busca todas las programaciones mensuales asociadas a la tarea.
+        - Elimina todos los registros encontrados.
+        - Registra la operación en el historial para auditoría.
+    
+    Retorna:
+        - dict: Mensaje de confirmación con el número de registros eliminados.
+    """
+    try:
+        # Verificar que la tarea exista
+        result = await db.execute(
+            select(models.Tarea).where(models.Tarea.id_tarea == id_tarea)
+        )
+        tarea = result.scalars().first()
+        if not tarea:
+            raise HTTPException(status_code=404, detail="Tarea no encontrada")
+
+        # Obtener la actividad y POA para el historial
+        result_actividad = await db.execute(
+            select(models.Actividad).where(models.Actividad.id_actividad == tarea.id_actividad)
+        )
+        actividad = result_actividad.scalars().first()
+        if not actividad:
+            raise HTTPException(status_code=404, detail="Actividad no encontrada")
+
+        # Buscar todas las programaciones mensuales de la tarea
+        result = await db.execute(
+            select(models.ProgramacionMensual).where(
+                models.ProgramacionMensual.id_tarea == id_tarea
+            )
+        )
+        programaciones = result.scalars().all()
+        
+        if not programaciones:
+            return {
+                "message": "No se encontraron programaciones mensuales para esta tarea",
+                "registros_eliminados": 0
+            }
+
+        # Contar registros antes de eliminar
+        total_registros = len(programaciones)
+        
+        # Crear resumen de programaciones para el historial
+        resumen_eliminado = ", ".join([
+            f"{prog.mes}: ${prog.valor}" for prog in programaciones
+        ])
+
+        # Eliminar todas las programaciones mensuales
+        for programacion in programaciones:
+            await db.delete(programacion)
+
+        # Registrar en el historial del POA
+        historico = models.HistoricoPoa(
+            id_historico=uuid.uuid4(),
+            id_poa=actividad.id_poa,
+            id_usuario=usuario.id_usuario,
+            fecha_modificacion=datetime.utcnow(),
+            campo_modificado="programacion_mensual_eliminada",
+            valor_anterior=resumen_eliminado,
+            valor_nuevo="",
+            justificacion=f"Eliminación completa de programación mensual de la tarea: {tarea.nombre}",
+            id_reforma=None
+        )
+        db.add(historico)
+
+        # Confirmar cambios
+        await db.commit()
+
+        return {
+            "message": f"Programación mensual eliminada exitosamente",
+            "tarea": tarea.nombre,
+            "registros_eliminados": total_registros,
+            "detalle": f"Se eliminaron {total_registros} registros de programación mensual"
+        }
+
+    except HTTPException:
+        await db.rollback()
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error interno al eliminar programación mensual: {str(e)}"
+        )
