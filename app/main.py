@@ -28,7 +28,7 @@ from app.utils import eliminar_tareas_y_actividades
 import io
 import pandas as pd
 import xlsxwriter
-from sqlalchemy import func
+from sqlalchemy import func, delete
 
 from reportlab.lib.pagesizes import letter,landscape
 from reportlab.lib import colors
@@ -729,6 +729,82 @@ async def obtener_proyecto(
     #     raise HTTPException(status_code=403, detail="No tienes acceso a este proyecto")
 
     return proyecto
+
+@app.delete("/proyectos/{id}")
+async def eliminar_proyecto(
+    id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    """
+    Elimina un proyecto y todos sus POAs asociados (con sus actividades y tareas).
+    Solo usuarios autenticados pueden eliminar proyectos.
+    """
+    # Verificar que el proyecto existe
+    result = await db.execute(
+        select(models.Proyecto).where(models.Proyecto.id_proyecto == id)
+    )
+    proyecto = result.scalars().first()
+
+    if not proyecto:
+        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+
+    # Obtener todos los POAs del proyecto
+    result_poas = await db.execute(
+        select(models.Poa).where(models.Poa.id_proyecto == id)
+    )
+    poas = result_poas.scalars().all()
+
+    # Eliminar todos los POAs y sus dependencias (actividades, tareas, etc.)
+    for poa in poas:
+        # Eliminar actividades y tareas del POA (sin commit interno)
+        result_actividades = await db.execute(
+            select(models.Actividad).where(models.Actividad.id_poa == poa.id_poa)
+        )
+        actividades = result_actividades.scalars().all()
+        for actividad in actividades:
+            # Eliminar programación mensual de las tareas
+            result_tareas = await db.execute(
+                select(models.Tarea).where(models.Tarea.id_actividad == actividad.id_actividad)
+            )
+            tareas = result_tareas.scalars().all()
+            for tarea in tareas:
+                await db.execute(
+                    delete(models.ProgramacionMensual).where(
+                        models.ProgramacionMensual.id_tarea == tarea.id_tarea
+                    )
+                )
+                await db.delete(tarea)
+            await db.delete(actividad)
+
+        # Eliminar histórico del POA
+        await db.execute(
+            delete(models.HistoricoPoa).where(models.HistoricoPoa.id_poa == poa.id_poa)
+        )
+
+        # Eliminar reformas del POA
+        await db.execute(
+            delete(models.ReformaPoa).where(models.ReformaPoa.id_poa == poa.id_poa)
+        )
+
+        # Eliminar logs de carga Excel del POA
+        await db.execute(
+            delete(models.LogCargaExcel).where(models.LogCargaExcel.id_poa == poa.id_poa)
+        )
+
+        # Eliminar el POA
+        await db.delete(poa)
+
+    # Eliminar histórico del proyecto
+    await db.execute(
+        delete(models.HistoricoProyecto).where(models.HistoricoProyecto.id_proyecto == id)
+    )
+
+    # Eliminar el proyecto
+    await db.delete(proyecto)
+    await db.commit()
+
+    return {"msg": f"Proyecto '{proyecto.titulo}' y todos sus POAs han sido eliminados correctamente"}
 
 @app.get("/roles/", response_model=List[schemas.RolOut])
 async def listar_roles(db: AsyncSession = Depends(get_db)):
