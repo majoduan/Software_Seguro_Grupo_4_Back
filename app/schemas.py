@@ -1,8 +1,18 @@
 from decimal import Decimal
-from pydantic import BaseModel, condecimal,constr,Field
+from pydantic import BaseModel, condecimal, constr, Field, EmailStr, field_validator
 from uuid import UUID
 from datetime import date, datetime
-from typing import Optional,List,Annotated
+from typing import Optional, List, Annotated
+from app.validators import (
+    validate_director_name,
+    validate_password_strength,
+    validate_username,
+    validate_email_format,
+    validate_anio_format,
+    validate_date_range,
+    validate_periodo_dates,
+    validate_codigo_unique_format
+)
 
 class Token(BaseModel):
     """
@@ -33,28 +43,41 @@ class UserCreate(BaseModel):
     Modelo para la creación de usuarios
 
     Objetivo:
-        Capturar la información necesaria para el registro de nuevos usuarios, incluyendo 
-        credenciales y asignación de roles, garantizando la integridad de los datos mediante 
+        Capturar la información necesaria para el registro de nuevos usuarios, incluyendo
+        credenciales y asignación de roles, garantizando la integridad de los datos mediante
         validaciones.
 
     Parámetros:
-        - nombre_usuario (str): Nombre identificador del usuario.
-        - email (str): Correo electrónico único para el usuario.
-        - password (str): Contraseña en texto plano que será procesada y almacenada de forma segura.
+        - nombre_usuario (str): Nombre identificador del usuario (3-100 caracteres, alfanuméricos).
+        - email (str): Correo electrónico único para el usuario (formato válido).
+        - password (str): Contraseña (mínimo 8 caracteres, 1 mayúscula, 1 número).
         - id_rol (UUID): Identificador del rol asociado al nuevo usuario.
 
     Operación:
         - Este modelo es utilizado en los endpoints de registro de usuarios.
         - La contraseña debe ser procesada (hasheada) antes de su almacenamiento en base de datos.
+        - Validaciones replicadas del frontend para consistencia.
 
     Retorna:
         - Instancia de `UserCreate` con los datos ingresados para su posterior procesamiento.
     """
 
-    nombre_usuario: str
-    email: str
-    password: str
+    nombre_usuario: constr(min_length=3, max_length=100, strip_whitespace=True)
+    email: EmailStr
+    password: constr(min_length=8, max_length=100)
     id_rol: UUID
+
+    @field_validator('nombre_usuario')
+    @classmethod
+    def validate_username_format(cls, v):
+        """Valida que el nombre de usuario solo contenga alfanuméricos y espacios"""
+        return validate_username(v)
+
+    @field_validator('password')
+    @classmethod
+    def validate_password_complexity(cls, v):
+        """Valida la complejidad de la contraseña (mayúscula + número)"""
+        return validate_password_strength(v)
 
 class UserOut(BaseModel):
     """
@@ -91,12 +114,29 @@ class UserOut(BaseModel):
 
 
 class PeriodoCreate(BaseModel):
-    codigo_periodo: str
-    nombre_periodo: str
+    """
+    Modelo para la creación de periodos fiscales/académicos
+
+    Validaciones replicadas del frontend:
+    - codigo_periodo: 3-150 caracteres
+    - nombre_periodo: 5-180 caracteres
+    - fecha_fin > fecha_inicio
+    - anio: 4 dígitos si está presente
+    """
+    codigo_periodo: constr(min_length=3, max_length=150, strip_whitespace=True)
+    nombre_periodo: constr(min_length=5, max_length=180, strip_whitespace=True)
     fecha_inicio: date
     fecha_fin: date
-    anio: Optional[str] = None
-    mes: Optional[str] = None
+    anio: Optional[constr(pattern=r'^\d{4}$')] = None
+    mes: Optional[constr(max_length=35)] = None
+
+    @field_validator('fecha_fin')
+    @classmethod
+    def validate_dates(cls, v, info):
+        """Valida que fecha_fin sea posterior a fecha_inicio"""
+        if 'fecha_inicio' in info.data and v is not None:
+            validate_periodo_dates(info.data['fecha_inicio'], v)
+        return v
 
 class PeriodoOut(PeriodoCreate):
     id_periodo: UUID
@@ -105,14 +145,28 @@ class PeriodoOut(PeriodoCreate):
         from_attributes = True
 
 class PoaCreate(BaseModel):
+    """
+    Modelo para la creación de POAs (Plan Operativo Anual)
+
+    Validaciones replicadas del frontend:
+    - codigo_poa: 5-50 caracteres
+    - anio_ejecucion: 4 dígitos
+    - presupuesto_asignado: > 0
+    """
     id_proyecto: UUID
     id_periodo: UUID
-    codigo_poa: str
+    codigo_poa: constr(min_length=5, max_length=50, strip_whitespace=True)
     fecha_creacion: datetime
     id_tipo_poa: UUID
     id_estado_poa: Optional[UUID]
-    anio_ejecucion: str
-    presupuesto_asignado: Decimal
+    anio_ejecucion: constr(pattern=r'^\d{4}$')
+    presupuesto_asignado: condecimal(gt=0, max_digits=18, decimal_places=2)
+
+    @field_validator('anio_ejecucion')
+    @classmethod
+    def validate_anio(cls, v):
+        """Valida el formato del año de ejecución"""
+        return validate_anio_format(v)
 
 
 class PoaOut(PoaCreate):
@@ -125,18 +179,59 @@ class PoaOut(PoaCreate):
 
 
 class ProyectoCreate(BaseModel):
-    codigo_proyecto: str
-    titulo: str
+    """
+    Modelo para la creación de proyectos
+
+    Validaciones replicadas del frontend:
+    - codigo_proyecto: 5-50 caracteres
+    - titulo: 10-2000 caracteres
+    - id_director_proyecto: 2-8 palabras, solo letras + acentos
+    - presupuesto_aprobado: > 0
+    - fecha_fin >= fecha_inicio
+    - fechas de prórroga coherentes
+    """
+    codigo_proyecto: constr(min_length=5, max_length=50, strip_whitespace=True)
+    titulo: constr(min_length=10, max_length=2000, strip_whitespace=True)
     id_tipo_proyecto: UUID
     id_estado_proyecto: UUID
-    id_director_proyecto: Optional[str] = None
+    id_director_proyecto: Optional[constr(min_length=5, max_length=200)] = None
     fecha_creacion: datetime
     fecha_inicio: Optional[date] = None
     fecha_fin: Optional[date] = None
     fecha_prorroga: Optional[date] = None
     fecha_prorroga_inicio: Optional[date] = None
     fecha_prorroga_fin: Optional[date] = None
-    presupuesto_aprobado: Optional[Decimal] = None
+    presupuesto_aprobado: Optional[condecimal(gt=0, max_digits=18, decimal_places=2)] = None
+
+    @field_validator('id_director_proyecto')
+    @classmethod
+    def validate_director(cls, v):
+        """Valida el formato del nombre del director (2-8 palabras, solo letras)"""
+        if v is not None:
+            return validate_director_name(v)
+        return v
+
+    @field_validator('fecha_fin')
+    @classmethod
+    def validate_end_date(cls, v, info):
+        """Valida que fecha_fin sea >= fecha_inicio"""
+        if v is not None and 'fecha_inicio' in info.data and info.data['fecha_inicio'] is not None:
+            if v < info.data['fecha_inicio']:
+                raise ValueError("La fecha de fin no puede ser anterior a la fecha de inicio")
+        return v
+
+    @field_validator('fecha_prorroga_fin')
+    @classmethod
+    def validate_all_dates(cls, v, info):
+        """Valida la coherencia de todas las fechas del proyecto"""
+        if v is not None:
+            validate_date_range(
+                fecha_inicio=info.data.get('fecha_inicio'),
+                fecha_fin=info.data.get('fecha_fin'),
+                fecha_prorroga_inicio=info.data.get('fecha_prorroga_inicio'),
+                fecha_prorroga_fin=v
+            )
+        return v
 
 class ProyectoOut(ProyectoCreate):
     id_proyecto: UUID
@@ -194,35 +289,39 @@ class TipoPoaOut(BaseModel):
     class Config:
         from_attributes = True
 
-
-class PeriodoCreate(BaseModel):
-    codigo_periodo: str
-    nombre_periodo: str
-    fecha_inicio: date
-    fecha_fin: date
-    anio: Optional[str] = None
-    mes: Optional[str] = None
-
-class PeriodoOut(PeriodoCreate):
-    id_periodo: UUID
-
-    class Config:
-        from_attributes = True
-
 class ActividadCreate(BaseModel):
-    descripcion_actividad: str
-    total_por_actividad: Optional[condecimal(ge=0)] = 0.00
-    saldo_actividad: Optional[condecimal(ge=0)] = 0.00
+    """
+    Modelo para la creación de actividades
+
+    Validaciones replicadas del frontend:
+    - descripcion_actividad: 10-500 caracteres
+    - total_por_actividad: >= 0
+    - saldo_actividad: >= 0
+    """
+    descripcion_actividad: constr(min_length=10, max_length=500, strip_whitespace=True)
+    total_por_actividad: Optional[condecimal(ge=0, max_digits=18, decimal_places=2)] = 0.00
+    saldo_actividad: Optional[condecimal(ge=0, max_digits=18, decimal_places=2)] = 0.00
+
 class ActividadesBatchCreate(BaseModel):
     actividades: List[ActividadCreate]
 
 class TareaCreate(BaseModel):
+    """
+    Modelo para la creación de tareas
+
+    Validaciones replicadas del frontend:
+    - nombre: máximo 200 caracteres
+    - detalle_descripcion: máximo 5000 caracteres
+    - cantidad: >= 0
+    - precio_unitario: >= 0
+    - lineaPaiViiv: >= 0 si está presente
+    """
     id_detalle_tarea: Optional[UUID] = None
-    nombre: Optional[str] = None
-    detalle_descripcion: Optional[str] = None
-    cantidad: Optional[condecimal(ge=0)] = 0
-    precio_unitario: Optional[condecimal(ge=0)] = 0
-    lineaPaiViiv: Optional[int] = None
+    nombre: Optional[constr(max_length=200)] = None
+    detalle_descripcion: Optional[constr(max_length=5000)] = None
+    cantidad: Optional[condecimal(ge=0, max_digits=10, decimal_places=2)] = 0
+    precio_unitario: Optional[condecimal(ge=0, max_digits=18, decimal_places=2)] = 0
+    lineaPaiViiv: Optional[int] = Field(None, ge=0)
 
 class TareaOut(BaseModel):
     id_tarea: UUID
@@ -372,14 +471,21 @@ class ItemPresupuestarioOut(BaseModel):
         orm_mode = True
 
 class ProgramacionMensualBase(BaseModel):
+    """
+    Modelo base para programación mensual
+
+    Validaciones replicadas del frontend:
+    - mes: formato MM-YYYY
+    - valor: >= 0
+    """
     mes: Annotated[str, Field(pattern=r"^\d{2}-\d{4}$")]  # Formato MM-AAAA
-    valor: Decimal
+    valor: condecimal(ge=0, max_digits=18, decimal_places=2)
 
 class ProgramacionMensualCreate(ProgramacionMensualBase):
     id_tarea: UUID
 
 class ProgramacionMensualUpdate(BaseModel):
-    valor: Decimal
+    valor: condecimal(ge=0, max_digits=18, decimal_places=2)
 
 class ProgramacionMensualOut(ProgramacionMensualBase):
     id_programacion: UUID

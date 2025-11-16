@@ -8,7 +8,15 @@ from app import models, schemas, auth
 from app.database import engine, get_db
 from app.middlewares import add_middlewares
 from app.scripts.init_data import seed_all_data
-from app.auth import COOKIE_SECURE, COOKIE_SAMESITE, COOKIE_HTTPONLY, get_current_user 
+from app.auth import COOKIE_SECURE, COOKIE_SAMESITE, COOKIE_HTTPONLY, get_current_user
+from app.business_validators import (
+    validate_proyecto_business_rules,
+    validate_poa_business_rules,
+    validate_periodo_business_rules,
+    validate_tarea_business_rules,
+    validate_usuario_business_rules,
+    validate_programacion_mensual_business_rules
+)
 from passlib.context import CryptContext
 import uuid
 from typing import List
@@ -209,17 +217,26 @@ Retorna:
 """
 @app.post("/register", response_model=schemas.UserOut)
 async def register_user(user: schemas.UserCreate, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(models.Usuario).where(models.Usuario.email == user.email)
-    )
-    existing_user = result.scalars().first()
-    if existing_user:
-        raise HTTPException(status_code=400, detail="El correo ya está registrado")
+    """
+    Endpoint de registro de usuarios con validaciones completas.
+
+    Validaciones aplicadas (replicadas del frontend):
+    - Formato de email válido (Pydantic EmailStr)
+    - Nombre de usuario: 3-100 caracteres, solo alfanuméricos (Pydantic + validator)
+    - Contraseña: mín 8 caracteres, 1 mayúscula, 1 número (Pydantic + validator)
+    - Email único (business validator)
+    - Rol existe (business validator)
+    """
+    # Validar reglas de negocio (email único, rol existe)
+    await validate_usuario_business_rules(db, user)
+
+    # Hash de contraseña
     hashed_final = pwd_context.hash(user.password)
 
+    # Crear usuario
     nuevo_usuario = models.Usuario(
         nombre_usuario=user.nombre_usuario,
-        email=user.email,
+        email=user.email.lower(),  # Normalizar email a minúsculas
         password_hash=hashed_final,
         id_rol=user.id_rol,
         activo=True,
@@ -264,20 +281,26 @@ async def logout(response: Response):
 
 @app.post("/periodos/", response_model=schemas.PeriodoOut)
 async def crear_periodo(data: schemas.PeriodoCreate, db: AsyncSession = Depends(get_db),usuario: models.Usuario = Depends(get_current_user)):
-    
+    """
+    Endpoint de creación de periodos con validaciones completas.
+
+    Validaciones aplicadas (replicadas del frontend):
+    - codigo_periodo: 3-150 caracteres (Pydantic)
+    - nombre_periodo: 5-180 caracteres (Pydantic)
+    - fecha_fin > fecha_inicio (Pydantic validator)
+    - anio: 4 dígitos si está presente (Pydantic)
+    - Código único (business validator)
+    - Permisos de rol (Admin o Director de Investigación)
+    """
     # Obtener el rol del usuario
     result = await db.execute(select(models.Rol).where(models.Rol.id_rol == usuario.id_rol))
     rol = result.scalars().first()
 
     if not rol or rol.nombre_rol not in ["Administrador", "Director de Investigacion"]:
         raise HTTPException(status_code=403, detail="No tienes permisos para crear periodos")
-    
-    # Validar que no exista ya el código
-    result = await db.execute(select(models.Periodo).where(models.Periodo.codigo_periodo == data.codigo_periodo))
-    existente = result.scalars().first()
 
-    if existente:
-        raise HTTPException(status_code=400, detail="Ya existe un periodo con ese código")
+    # Validar reglas de negocio (código único)
+    await validate_periodo_business_rules(db, data)
 
     nuevo = models.Periodo(
         id_periodo=uuid.uuid4(),
@@ -354,48 +377,25 @@ async def crear_poa(
     db: AsyncSession = Depends(get_db),
     usuario: models.Usuario = Depends(get_current_user)
 ):
-    # Validar que el proyecto exista
-    result = await db.execute(select(models.Proyecto).where(models.Proyecto.id_proyecto == data.id_proyecto))
-    proyecto = result.scalars().first()
-    if not proyecto:
-        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
-    # Validar que el periodo exista
-    result = await db.execute(select(models.Periodo).where(models.Periodo.id_periodo == data.id_periodo))
-    periodo = result.scalars().first()
-    if not periodo:
-        raise HTTPException(status_code=404, detail="Periodo no encontrado")
-     # Verificar si ya existe un POA con ese periodo
-    result = await db.execute(
-        select(models.Poa).where(models.Poa.id_periodo == data.id_periodo)
-    )
-    poa_existente = result.scalars().first()
-    if poa_existente:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Ya existe un POA asignado al periodo '{periodo.nombre_periodo}'"
-        )
-    
-    # Validar que el tipo POA exista
-    result = await db.execute(select(models.TipoPOA).where(models.TipoPOA.id_tipo_poa == data.id_tipo_poa))
-    tipo_poa = result.scalars().first()
-    if not tipo_poa:
-        raise HTTPException(status_code=404, detail="Tipo de POA no encontrado")
-    
-    # Mejorar el cálculo de la duración del periodo para considerar días también
-    diferencia = relativedelta(periodo.fecha_fin, periodo.fecha_inicio)
-    duracion_meses = diferencia.months + diferencia.years * 12
+    """
+    Endpoint de creación de POAs con validaciones completas.
 
-    # Si hay días adicionales, considerar como mes adicional si es más de la mitad del mes
-    if diferencia.days > 15:
-        duracion_meses += 1
-    
-    if duracion_meses > tipo_poa.duracion_meses:
-        raise HTTPException(
-            status_code=400,
-            detail=f"El periodo '{periodo.nombre_periodo}' tiene una duración de {duracion_meses} meses, " +
-                   f"pero el tipo de POA '{tipo_poa.nombre}' permite máximo {tipo_poa.duracion_meses} meses"
-        )
+    Validaciones aplicadas (replicadas del frontend):
+    - codigo_poa: 5-50 caracteres (Pydantic)
+    - anio_ejecucion: 4 dígitos (Pydantic)
+    - presupuesto_asignado: > 0 (Pydantic)
+    - Código único (business validator)
+    - Proyecto existe (business validator)
+    - Periodo existe (business validator)
+    - Tipo POA existe (business validator)
+    - No duplicar periodo por proyecto (business validator)
+    - Presupuesto <= presupuesto_maximo del tipo POA (business validator)
+    - Duración del periodo <= duracion_meses del tipo POA (business validator)
+    """
+    # Validar todas las reglas de negocio
+    await validate_poa_business_rules(db, data)
 
+    # Obtener estado "Ingresado"
     result = await db.execute(select(models.EstadoPOA).where(models.EstadoPOA.nombre == "Ingresado"))
     estado = result.scalars().first()
     if not estado:
@@ -589,15 +589,24 @@ async def crear_proyecto(
     db: AsyncSession = Depends(get_db),
     usuario: models.Usuario = Depends(get_current_user)
 ):
-    # Validar existencia de tipo de proyecto
-    result = await db.execute(select(models.TipoProyecto).where(models.TipoProyecto.id_tipo_proyecto == data.id_tipo_proyecto))
-    if not result.scalars().first():
-        raise HTTPException(status_code=404, detail="Tipo de proyecto no encontrado")
+    """
+    Endpoint de creación de proyectos con validaciones completas.
 
-    # Validar existencia de estado de proyecto
-    result = await db.execute(select(models.EstadoProyecto).where(models.EstadoProyecto.id_estado_proyecto == data.id_estado_proyecto))
-    if not result.scalars().first():
-        raise HTTPException(status_code=404, detail="Estado de proyecto no encontrado")
+    Validaciones aplicadas (replicadas del frontend):
+    - codigo_proyecto: 5-50 caracteres (Pydantic)
+    - titulo: 10-2000 caracteres (Pydantic)
+    - id_director_proyecto: 2-8 palabras, solo letras (Pydantic validator)
+    - presupuesto_aprobado: > 0 (Pydantic)
+    - fecha_fin >= fecha_inicio (Pydantic validator)
+    - Fechas de prórroga coherentes (Pydantic validator)
+    - Código único (business validator)
+    - Tipo proyecto existe (business validator)
+    - Estado proyecto existe (business validator)
+    - Presupuesto <= presupuesto_maximo del tipo (business validator)
+    - Duración <= duracion_meses del tipo (business validator)
+    """
+    # Validar todas las reglas de negocio
+    await validate_proyecto_business_rules(db, data)
 
     nuevo = models.Proyecto(
         id_proyecto=uuid.uuid4(),
@@ -627,14 +636,24 @@ async def editar_proyecto(
     db: AsyncSession = Depends(get_db),
     usuario: models.Usuario = Depends(get_current_user)
 ):
+    """
+    Endpoint de edición de proyectos con validaciones completas.
+
+    Validaciones aplicadas (mismas que en creación):
+    - Todas las validaciones de Pydantic
+    - Validaciones de business rules (permite mismo código si es el mismo proyecto)
+    """
     try:
         result = await db.execute(select(models.Proyecto).where(models.Proyecto.id_proyecto == id))
         proyecto = result.scalars().first()
- 
+
         if not proyecto:
             raise HTTPException(status_code=404, detail="Proyecto no encontrado")
- 
-        # Validar tipo y estado
+
+        # Validar todas las reglas de negocio (pasando el ID para excluir en validación de código único)
+        await validate_proyecto_business_rules(db, data, proyecto_id=str(id))
+
+        # Validar tipo y estado (redundante pero mantenido para compatibilidad)
         tipo = await db.execute(select(models.TipoProyecto).where(models.TipoProyecto.id_tipo_proyecto == data.id_tipo_proyecto))
         if not tipo.scalars().first():
             raise HTTPException(status_code=404, detail="Tipo de proyecto no encontrado")
