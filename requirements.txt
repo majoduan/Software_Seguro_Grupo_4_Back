@@ -8,6 +8,7 @@ python-jose
 python-dotenv
 python-multipart
 python-dateutil
+email-validator
 pandas
 openpyxl
 numpy
