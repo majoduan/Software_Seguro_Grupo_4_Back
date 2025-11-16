@@ -1,7 +1,8 @@
 from datetime import datetime,timezone,timedelta
 from decimal import Decimal
-from fastapi import FastAPI, Depends, HTTPException,UploadFile, File, Form, Body, Query, Response
+from fastapi import FastAPI, Depends, HTTPException,UploadFile, File, Form, Body, Query, Response, Request
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app import models, schemas, auth
@@ -62,6 +63,29 @@ app = FastAPI()
 #middlewares
 # CORS middleware
 add_middlewares(app)
+
+# Manejador global de excepciones para asegurar que CORS headers se envíen siempre
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """
+    Manejador global de HTTPException que asegura que las cabeceras CORS
+    se envíen incluso cuando hay errores de autenticación o autorización.
+    """
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=exc.headers if exc.headers else {}
+    )
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """
+    Manejador global de excepciones generales para evitar errores 500 sin CORS headers.
+    """
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Error interno del servidor: {str(exc)}"}
+    )
 
 def quitar_tildes(texto):
     return ''.join(
