@@ -811,9 +811,9 @@ async def eliminar_proyecto(
             delete(models.ReformaPoa).where(models.ReformaPoa.id_poa == poa.id_poa)
         )
 
-        # Eliminar logs de carga Excel del POA
+        # Eliminar logs de carga Excel del POA (id_poa es String, no UUID)
         await db.execute(
-            delete(models.LogCargaExcel).where(models.LogCargaExcel.id_poa == poa.id_poa)
+            delete(models.LogCargaExcel).where(models.LogCargaExcel.id_poa == str(poa.id_poa))
         )
 
         # Eliminar el POA
