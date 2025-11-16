@@ -203,6 +203,18 @@ class ProyectoCreate(BaseModel):
     fecha_prorroga_fin: Optional[date] = None
     presupuesto_aprobado: Optional[condecimal(gt=0, max_digits=18, decimal_places=2)] = None
 
+    @field_validator('fecha_creacion', mode='before')
+    @classmethod
+    def convert_date_to_datetime(cls, v):
+        """Convierte date a datetime si es necesario"""
+        if isinstance(v, str):
+            # Si es solo fecha (YYYY-MM-DD), agregar hora
+            if len(v) == 10 and v.count('-') == 2:
+                return datetime.fromisoformat(f"{v}T00:00:00")
+        if isinstance(v, date) and not isinstance(v, datetime):
+            return datetime.combine(v, datetime.min.time())
+        return v
+
     @field_validator('id_director_proyecto')
     @classmethod
     def validate_director(cls, v):
@@ -233,8 +245,26 @@ class ProyectoCreate(BaseModel):
             )
         return v
 
-class ProyectoOut(ProyectoCreate):
+class ProyectoOut(BaseModel):
+    """
+    Modelo para la salida de proyectos (sin validaciones estrictas)
+
+    No hereda de ProyectoCreate para evitar que los validadores
+    se ejecuten al serializar datos existentes de la BD.
+    """
     id_proyecto: UUID
+    codigo_proyecto: str
+    titulo: str
+    id_tipo_proyecto: UUID
+    id_estado_proyecto: UUID
+    id_director_proyecto: Optional[str] = None
+    fecha_creacion: datetime
+    fecha_inicio: Optional[date] = None
+    fecha_fin: Optional[date] = None
+    fecha_prorroga: Optional[date] = None
+    fecha_prorroga_inicio: Optional[date] = None
+    fecha_prorroga_fin: Optional[date] = None
+    presupuesto_aprobado: Optional[Decimal] = None
 
     class Config:
         from_attributes = True
