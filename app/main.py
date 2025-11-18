@@ -158,12 +158,12 @@ async def login(
         data={"sub": str(usuario.id_usuario), "id_rol": str(usuario.id_rol)},
         expires_delta=timedelta(days=7)
     )
-   
+
     # Configurar cookie segura con token cifrado
     response.set_cookie(
         key="auth_token",
         value=encrypted_token,  # ← Token JWT cifrado (ilegible)
-        max_age=3600,
+        max_age=7 * 24 * 60 * 60,  # 7 días en segundos (604800)
         httponly=COOKIE_HTTPONLY,
         secure=COOKIE_SECURE,
         # samesite=COOKIE_SAMESITE if COOKIE_SAMESITE in ("lax", "strict", "none") else "lax"
