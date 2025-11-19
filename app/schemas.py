@@ -544,9 +544,18 @@ class ProgramacionMensualCreate(ProgramacionMensualBase):
 class ProgramacionMensualUpdate(BaseModel):
     valor: condecimal(ge=0, max_digits=18, decimal_places=2)
 
-class ProgramacionMensualOut(ProgramacionMensualBase):
+class ProgramacionMensualOut(BaseModel):
+    """
+    Modelo de salida para programación mensual
+
+    IMPORTANTE: NO hereda de ProgramacionMensualBase para evitar que los validadores
+    estrictos de input (como el patrón regex del mes) se ejecuten durante la serialización.
+    Esto previene errores 500 cuando datos antiguos tienen formato diferente (ej: "abril" vs "04-2024").
+    """
     id_programacion: UUID
     id_tarea: UUID
+    mes: str  # Sin validador de patrón para permitir cualquier formato existente
+    valor: Decimal
 
     class Config:
         orm_mode = True
