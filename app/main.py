@@ -71,10 +71,29 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     Manejador global de HTTPException que asegura que las cabeceras CORS
     se envíen incluso cuando hay errores de autenticación o autorización.
     """
+    # Obtener el origen de la petición
+    origin = request.headers.get("origin")
+
+    # Headers CORS que siempre deben estar presentes
+    cors_headers = {}
+
+    # Solo añadir CORS headers si el origen está permitido
+    allowed_origins = ["https://software-seguro-grupo-4-front.vercel.app"]
+    if origin in allowed_origins:
+        cors_headers = {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Accept, Content-Type, Authorization, Cookie, X-Requested-With",
+        }
+
+    # Combinar headers de CORS con headers existentes de la excepción
+    response_headers = {**cors_headers, **(exc.headers if exc.headers else {})}
+
     return JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail},
-        headers=exc.headers if exc.headers else {}
+        headers=response_headers
     )
 
 @app.exception_handler(Exception)
@@ -82,9 +101,26 @@ async def general_exception_handler(request: Request, exc: Exception):
     """
     Manejador global de excepciones generales para evitar errores 500 sin CORS headers.
     """
+    # Obtener el origen de la petición
+    origin = request.headers.get("origin")
+
+    # Headers CORS que siempre deben estar presentes
+    cors_headers = {}
+
+    # Solo añadir CORS headers si el origen está permitido
+    allowed_origins = ["https://software-seguro-grupo-4-front.vercel.app"]
+    if origin in allowed_origins:
+        cors_headers = {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Accept, Content-Type, Authorization, Cookie, X-Requested-With",
+        }
+
     return JSONResponse(
         status_code=500,
-        content={"detail": f"Error interno del servidor: {str(exc)}"}
+        content={"detail": f"Error interno del servidor: {str(exc)}"},
+        headers=cors_headers
     )
 
 def quitar_tildes(texto):
