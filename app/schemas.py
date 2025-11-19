@@ -138,8 +138,21 @@ class PeriodoCreate(BaseModel):
             validate_periodo_dates(info.data['fecha_inicio'], v)
         return v
 
-class PeriodoOut(PeriodoCreate):
+class PeriodoOut(BaseModel):
+    """
+    Modelo de salida para periodos
+
+    IMPORTANTE: NO hereda de PeriodoCreate para evitar que los validadores
+    estrictos de input se ejecuten durante la serialización de datos existentes.
+    Esto previene errores 500 cuando datos antiguos no cumplen validaciones nuevas.
+    """
     id_periodo: UUID
+    codigo_periodo: str
+    nombre_periodo: str
+    fecha_inicio: date
+    fecha_fin: date
+    anio: Optional[str] = None
+    mes: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -169,10 +182,23 @@ class PoaCreate(BaseModel):
         return validate_anio_format(v)
 
 
-class PoaOut(PoaCreate):
+class PoaOut(BaseModel):
+    """
+    Modelo de salida para POAs
+
+    IMPORTANTE: NO hereda de PoaCreate para evitar que los validadores
+    estrictos de input se ejecuten durante la serialización de datos existentes.
+    Esto previene errores 500 cuando datos antiguos no cumplen validaciones nuevas.
+    """
     id_poa: UUID
+    id_proyecto: UUID
+    id_periodo: UUID
+    codigo_poa: str
     fecha_creacion: datetime
+    id_tipo_poa: UUID
     id_estado_poa: UUID
+    anio_ejecucion: str
+    presupuesto_asignado: Decimal
 
     class Config:
         from_attributes = True
