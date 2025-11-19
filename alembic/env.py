@@ -57,7 +57,22 @@ target_metadata = Base.metadata
 # 🔒 Obtener URL de base de datos desde variables de entorno
 # En desarrollo local: usa DATABASE_URL del .env
 # En producción (Render): usa DATABASE_URL inyectada por Render
-url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@db:5432/fastapidb")
+database_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@db:5432/fastapidb")
+
+# Convertir URL de asyncpg a psycopg2 (Alembic requiere driver síncrono)
+# Render usa: postgresql+asyncpg://...?sslmode=require&channel_binding=require
+# Alembic necesita: postgresql://...
+if database_url.startswith("postgresql+asyncpg://"):
+    # Reemplazar asyncpg por psycopg2
+    database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
+
+    # Remover parámetros de asyncpg que psycopg2 no soporta
+    # channel_binding=require no es compatible con psycopg2
+    database_url = database_url.replace("&channel_binding=require", "")
+    database_url = database_url.replace("channel_binding=require&", "")
+    database_url = database_url.replace("?channel_binding=require", "")
+
+url = database_url
 
 
 def run_migrations_offline():
