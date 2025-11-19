@@ -221,6 +221,72 @@ async def validate_poa_business_rules(
                    f"permitida para este tipo de POA"
         )
 
+    # Validar que la suma de presupuestos de POAs no exceda el presupuesto del proyecto
+    await validate_poa_presupuesto_proyecto(
+        db=db,
+        id_proyecto=data.id_proyecto,
+        nuevo_presupuesto_poa=data.presupuesto_asignado,
+        poa_id_excluir=poa_id
+    )
+
+
+async def validate_poa_presupuesto_proyecto(
+    db: AsyncSession,
+    id_proyecto,
+    nuevo_presupuesto_poa: Decimal,
+    poa_id_excluir: Optional[str] = None
+) -> None:
+    """
+    Valida que la suma de presupuestos de POAs no exceda el presupuesto del proyecto.
+
+    Args:
+        db: Sesión de base de datos
+        id_proyecto: ID del proyecto
+        nuevo_presupuesto_poa: Presupuesto del POA que se está creando/editando
+        poa_id_excluir: ID del POA a excluir del cálculo (en caso de edición)
+
+    Raises:
+        HTTPException: Si la suma excede el presupuesto del proyecto
+    """
+    # Obtener el proyecto
+    result = await db.execute(
+        select(models.Proyecto).where(
+            models.Proyecto.id_proyecto == id_proyecto
+        )
+    )
+    proyecto = result.scalars().first()
+    if not proyecto or not proyecto.presupuesto_aprobado:
+        return  # Si no hay presupuesto aprobado, no validar
+
+    # Calcular suma de presupuestos de POAs existentes
+    query = select(models.Poa).where(models.Poa.id_proyecto == id_proyecto)
+    if poa_id_excluir:
+        query = query.where(models.Poa.id_poa != poa_id_excluir)
+
+    result = await db.execute(query)
+    poas_existentes = result.scalars().all()
+
+    suma_poas_existentes = sum(
+        float(poa.presupuesto_asignado or 0)
+        for poa in poas_existentes
+    )
+
+    # Calcular nuevo total
+    total_con_nuevo_poa = suma_poas_existentes + float(nuevo_presupuesto_poa)
+    presupuesto_proyecto = float(proyecto.presupuesto_aprobado)
+
+    if total_con_nuevo_poa > presupuesto_proyecto:
+        diferencia = total_con_nuevo_poa - presupuesto_proyecto
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"La suma de presupuestos de POAs (${total_con_nuevo_poa:,.2f}) "
+                f"excedería el presupuesto aprobado del proyecto (${presupuesto_proyecto:,.2f}). "
+                f"Diferencia: ${diferencia:,.2f}. "
+                f"Presupuesto disponible: ${presupuesto_proyecto - suma_poas_existentes:,.2f}"
+            )
+        )
+
 
 async def validate_periodo_business_rules(
     db: AsyncSession,

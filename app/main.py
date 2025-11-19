@@ -895,6 +895,37 @@ async def crear_actividades_para_poa(
     if not poa:
         raise HTTPException(status_code=404, detail="POA no encontrado")
 
+    # VALIDACIÓN: Calcular suma de actividades existentes
+    result = await db.execute(
+        select(models.Actividad).where(models.Actividad.id_poa == id_poa)
+    )
+    actividades_existentes = result.scalars().all()
+    suma_existente = sum(
+        float(act.total_por_actividad or 0)
+        for act in actividades_existentes
+    )
+
+    # Calcular suma de las nuevas actividades
+    suma_nuevas = sum(
+        float(act.total_por_actividad or 0)
+        for act in data.actividades
+    )
+
+    total_actividades = suma_existente + suma_nuevas
+    presupuesto_poa = float(poa.presupuesto_asignado)
+
+    if total_actividades > presupuesto_poa:
+        diferencia = total_actividades - presupuesto_poa
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"La suma de actividades (${total_actividades:,.2f}) excedería "
+                f"el presupuesto asignado al POA (${presupuesto_poa:,.2f}). "
+                f"Diferencia: ${diferencia:,.2f}. "
+                f"Presupuesto disponible: ${presupuesto_poa - suma_existente:,.2f}"
+            )
+        )
+
     actividades = [
         models.Actividad(
             id_actividad=uuid.uuid4(),
@@ -944,6 +975,31 @@ async def crear_tarea(
     precio_unitario = data.precio_unitario or Decimal("0")
     total = precio_unitario * cantidad
 
+    # VALIDACIÓN: Obtener suma de tareas existentes de la actividad
+    result = await db.execute(
+        select(models.Tarea).where(models.Tarea.id_actividad == id_actividad)
+    )
+    tareas_existentes = result.scalars().all()
+    suma_tareas_existente = sum(
+        float(tarea.total or 0)
+        for tarea in tareas_existentes
+    )
+
+    nueva_suma_tareas = suma_tareas_existente + float(total)
+    presupuesto_actividad = float(actividad.total_por_actividad or 0)
+
+    if nueva_suma_tareas > presupuesto_actividad:
+        diferencia = nueva_suma_tareas - presupuesto_actividad
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"La suma de tareas (${nueva_suma_tareas:,.2f}) excedería "
+                f"el presupuesto de la actividad (${presupuesto_actividad:,.2f}). "
+                f"Diferencia: ${diferencia:,.2f}. "
+                f"Presupuesto disponible: ${presupuesto_actividad - suma_tareas_existente:,.2f}"
+            )
+        )
+
     nueva_tarea = models.Tarea(
         id_tarea=uuid.uuid4(),
         id_actividad=id_actividad,
@@ -957,9 +1013,9 @@ async def crear_tarea(
         lineaPaiViiv=data.lineaPaiViiv
     )
 
-    # Actualizar montos en la actividad
-    actividad.total_por_actividad += total
-    actividad.saldo_actividad += total
+    # NOTA: NO modificamos total_por_actividad ni saldo_actividad
+    # El presupuesto de la actividad es FIJO (viene del Excel o se define al crear)
+    # Solo validamos que la suma de tareas no exceda ese límite
 
     db.add(nueva_tarea)
     await db.commit()
@@ -969,12 +1025,37 @@ async def crear_tarea(
 
 
 @app.delete("/tareas/{id_tarea}")
-async def eliminar_tarea(id_tarea: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def eliminar_tarea(
+    id_tarea: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
     result = await db.execute(select(models.Tarea).where(models.Tarea.id_tarea == id_tarea))
     tarea = result.scalars().first()
     if not tarea:
         raise HTTPException(status_code=404, detail="Tarea no encontrada")
-    
+
+    # Obtener actividad para auditoría
+    result = await db.execute(
+        select(models.Actividad).where(models.Actividad.id_actividad == tarea.id_actividad)
+    )
+    actividad = result.scalars().first()
+
+    # Registrar en auditoría la eliminación
+    if actividad:
+        historico = models.HistoricoPoa(
+            id_historico=uuid.uuid4(),
+            id_poa=actividad.id_poa,
+            id_usuario=usuario.id_usuario,
+            fecha_modificacion=datetime.utcnow(),
+            campo_modificado="tarea_eliminada",
+            valor_anterior=f"Tarea: {tarea.nombre}, Total: ${float(tarea.total or 0):.2f}",
+            valor_nuevo="",
+            justificacion="Eliminación de tarea",
+            id_reforma=None
+        )
+        db.add(historico)
+
     await db.delete(tarea)
     await db.commit()
     return {"msg": "Tarea eliminada correctamente"}
@@ -1029,12 +1110,7 @@ async def editar_tarea(
             raise HTTPException(status_code=404, detail="Actividad no encontrada")
  
         id_poa = actividad.id_poa
-        
-        # Guardar valores anteriores para cálculos y auditoría
-        total_anterior = tarea.total or Decimal("0")
-        cantidad_anterior = tarea.cantidad or Decimal("0")
-        precio_anterior = tarea.precio_unitario or Decimal("0")
- 
+
         # Campos a auditar
         campos_auditar = ["cantidad", "precio_unitario", "lineaPaiViiv"]
  
@@ -1064,27 +1140,48 @@ async def editar_tarea(
         cantidad = tarea.cantidad or Decimal("0")
         precio_unitario = tarea.precio_unitario or Decimal("0")
         nuevo_total = precio_unitario * cantidad
-        
+
+        # VALIDACIÓN: Verificar que la suma de tareas no exceda el presupuesto de la actividad
+        # Obtener todas las tareas de la actividad (excluyendo la actual)
+        result = await db.execute(
+            select(models.Tarea).where(
+                models.Tarea.id_actividad == actividad.id_actividad,
+                models.Tarea.id_tarea != id_tarea
+            )
+        )
+        otras_tareas = result.scalars().all()
+
+        suma_otras_tareas = sum(float(t.total or 0) for t in otras_tareas)
+        nueva_suma_total = suma_otras_tareas + float(nuevo_total)
+        presupuesto_actividad = float(actividad.total_por_actividad or 0)
+
+        if nueva_suma_total > presupuesto_actividad:
+            diferencia = nueva_suma_total - presupuesto_actividad
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"La modificación haría que la suma de tareas (${nueva_suma_total:,.2f}) "
+                    f"exceda el presupuesto de la actividad (${presupuesto_actividad:,.2f}). "
+                    f"Diferencia: ${diferencia:,.2f}"
+                )
+            )
+
         # Actualizar el total y saldo_disponible de la tarea
         tarea.total = nuevo_total
-        tarea.saldo_disponible = nuevo_total  # Asumiendo que el saldo disponible se resetea al nuevo total
-        
-        # Actualizar los montos en la actividad
-        # Validar que los valores de la actividad no sean None
-        actividad.total_por_actividad = (actividad.total_por_actividad or Decimal("0")) - total_anterior + nuevo_total
-        actividad.saldo_actividad = (actividad.saldo_actividad or Decimal("0")) - total_anterior + nuevo_total
-        
-        # Validar que los totales no queden negativos
-        if actividad.total_por_actividad < 0:
-            actividad.total_por_actividad = Decimal("0")
-        if actividad.saldo_actividad < 0:
-            actividad.saldo_actividad = Decimal("0")
- 
+        tarea.saldo_disponible = nuevo_total
+
+        # NOTA: NO modificamos total_por_actividad ni saldo_actividad
+        # El presupuesto de la actividad es FIJO (viene del Excel o se define al crear)
+        # Solo validamos que la suma de tareas no exceda ese límite
+
         await db.commit()
         await db.refresh(tarea)
- 
+
         return {"msg": "Tarea actualizada", "tarea": tarea}
- 
+
+    except HTTPException:
+        await db.rollback()
+        raise
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail="Error interno al editar la tarea")
@@ -1126,10 +1223,122 @@ async def eliminar_actividad(id_actividad: uuid.UUID, db: AsyncSession = Depends
     actividad = result.scalars().first()
     if not actividad:
         raise HTTPException(status_code=404, detail="Actividad no encontrada")
-    
+
     await db.delete(actividad)
     await db.commit()
     return {"msg": "Actividad eliminada correctamente"}
+
+
+# Endpoints de consulta de presupuesto disponible
+@app.get("/proyectos/{id_proyecto}/presupuesto-disponible")
+async def obtener_presupuesto_disponible_proyecto(
+    id_proyecto: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    """
+    Retorna información detallada del presupuesto del proyecto.
+    Muestra cuánto presupuesto se ha asignado a POAs y cuánto queda disponible.
+    """
+    # Obtener proyecto
+    result = await db.execute(
+        select(models.Proyecto).where(models.Proyecto.id_proyecto == id_proyecto)
+    )
+    proyecto = result.scalars().first()
+    if not proyecto:
+        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+
+    # Obtener suma de POAs
+    result = await db.execute(
+        select(models.Poa).where(models.Poa.id_proyecto == id_proyecto)
+    )
+    poas = result.scalars().all()
+    suma_poas = sum(float(poa.presupuesto_asignado or 0) for poa in poas)
+
+    presupuesto_aprobado = float(proyecto.presupuesto_aprobado or 0)
+    disponible = presupuesto_aprobado - suma_poas
+
+    return {
+        "presupuesto_aprobado": presupuesto_aprobado,
+        "suma_poas_asignados": suma_poas,
+        "presupuesto_disponible": disponible,
+        "porcentaje_utilizado": (suma_poas / presupuesto_aprobado * 100) if presupuesto_aprobado > 0 else 0,
+        "cantidad_poas": len(poas)
+    }
+
+
+@app.get("/poas/{id_poa}/presupuesto-disponible")
+async def obtener_presupuesto_disponible_poa(
+    id_poa: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    """
+    Retorna información detallada del presupuesto del POA.
+    Muestra cuánto presupuesto se ha asignado a actividades y cuánto queda disponible.
+    """
+    # Obtener POA
+    result = await db.execute(
+        select(models.Poa).where(models.Poa.id_poa == id_poa)
+    )
+    poa = result.scalars().first()
+    if not poa:
+        raise HTTPException(status_code=404, detail="POA no encontrado")
+
+    # Obtener suma de actividades
+    result = await db.execute(
+        select(models.Actividad).where(models.Actividad.id_poa == id_poa)
+    )
+    actividades = result.scalars().all()
+    suma_actividades = sum(float(act.total_por_actividad or 0) for act in actividades)
+
+    presupuesto_asignado = float(poa.presupuesto_asignado or 0)
+    disponible = presupuesto_asignado - suma_actividades
+
+    return {
+        "presupuesto_asignado": presupuesto_asignado,
+        "suma_actividades": suma_actividades,
+        "presupuesto_disponible": disponible,
+        "porcentaje_utilizado": (suma_actividades / presupuesto_asignado * 100) if presupuesto_asignado > 0 else 0,
+        "cantidad_actividades": len(actividades)
+    }
+
+
+@app.get("/actividades/{id_actividad}/presupuesto-disponible")
+async def obtener_presupuesto_disponible_actividad(
+    id_actividad: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    """
+    Retorna información detallada del presupuesto de la actividad.
+    Muestra cuánto presupuesto se ha utilizado en tareas y cuánto queda disponible.
+    """
+    # Obtener actividad
+    result = await db.execute(
+        select(models.Actividad).where(models.Actividad.id_actividad == id_actividad)
+    )
+    actividad = result.scalars().first()
+    if not actividad:
+        raise HTTPException(status_code=404, detail="Actividad no encontrada")
+
+    # Obtener suma de tareas
+    result = await db.execute(
+        select(models.Tarea).where(models.Tarea.id_actividad == id_actividad)
+    )
+    tareas = result.scalars().all()
+    suma_tareas = sum(float(tarea.total or 0) for tarea in tareas)
+
+    presupuesto_actividad = float(actividad.total_por_actividad or 0)
+    disponible = presupuesto_actividad - suma_tareas
+
+    return {
+        "total_por_actividad": presupuesto_actividad,
+        "suma_tareas": suma_tareas,
+        "presupuesto_disponible": disponible,
+        "porcentaje_utilizado": (suma_tareas / presupuesto_actividad * 100) if presupuesto_actividad > 0 else 0,
+        "cantidad_tareas": len(tareas)
+    }
 
 
 #tareas por actividad
