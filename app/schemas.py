@@ -405,6 +405,7 @@ class DetalleTareaOut(BaseModel):
 
 class ActividadOut(BaseModel):
     id_actividad: UUID
+    numero_actividad: Optional[int] = None  # Número de orden de la actividad
     descripcion_actividad: str
     total_por_actividad: condecimal(max_digits=18, decimal_places=2)
     saldo_actividad: condecimal(max_digits=18, decimal_places=2)

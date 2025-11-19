@@ -175,6 +175,7 @@ class Actividad(Base):
 
     id_actividad = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     id_poa = Column(UUID(as_uuid=True), ForeignKey("POA.id_poa"), nullable=False)
+    numero_actividad = Column(Integer, nullable=True)  # Orden de la actividad (1, 2, 3, ...)
     descripcion_actividad = Column(String(500), nullable=False)
     total_por_actividad = Column(DECIMAL(18, 2), nullable=False)
     saldo_actividad = Column(DECIMAL(18, 2), nullable=False)

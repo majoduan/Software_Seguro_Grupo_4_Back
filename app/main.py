@@ -1113,7 +1113,9 @@ async def obtener_actividades_de_poa(
     usuario: models.Usuario = Depends(get_current_user)
 ):
     result = await db.execute(
-        select(models.Actividad).where(models.Actividad.id_poa == id_poa)
+        select(models.Actividad)
+        .where(models.Actividad.id_poa == id_poa)
+        .order_by(models.Actividad.numero_actividad.asc())  # Ordenar por número de actividad
     )
     return result.scalars().all()
 
@@ -1555,6 +1557,7 @@ async def transformar_archivo_excel(
             nueva_actividad = models.Actividad(
                 id_actividad=uuid.uuid4(),
                 id_poa=id_poa,
+                numero_actividad=actividad.get("numero_actividad"),  # Guardar el número de orden
                 descripcion_actividad=actividad["descripcion_actividad"],
                 total_por_actividad=actividad["total_por_actividad"],
                 saldo_actividad=actividad["total_por_actividad"],  # Inicialmente igual al total

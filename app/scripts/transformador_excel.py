@@ -107,7 +107,7 @@ def transformar_excel(file_bytes: bytes, hoja: str):
                     f"No se encontró la actividad ({actividad_esperada}) después de la actividad : {actividad_actual_obj['descripcion_actividad']}.\n"
                 )
             actividad_esperada += 1  # Esperar la siguiente en la próxima iteración
-        
+
             actividad_total = fila[col_total_por_actividad]
             try:
                 actividad_total = float(actividad_total)
@@ -120,6 +120,7 @@ def transformar_excel(file_bytes: bytes, hoja: str):
                 actividad_total = 0.0
 
             actividad_actual_obj = {
+                "numero_actividad": num_actividad,  # Guardar el número de actividad extraído
                 "descripcion_actividad": texto_col3.strip(),
                 "total_por_actividad": float(actividad_total),
                 "tareas": []
