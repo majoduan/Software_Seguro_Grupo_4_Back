@@ -54,8 +54,10 @@ from app.models import (
 # Asignar metadata de los modelos
 target_metadata = Base.metadata
 
-# 🔒 Forzar uso de psycopg2 en Alembic (modo síncrono)
-url = "postgresql://postgres:postgres@db:5432/fastapidb"
+# 🔒 Obtener URL de base de datos desde variables de entorno
+# En desarrollo local: usa DATABASE_URL del .env
+# En producción (Render): usa DATABASE_URL inyectada por Render
+url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@db:5432/fastapidb")
 
 
 def run_migrations_offline():
