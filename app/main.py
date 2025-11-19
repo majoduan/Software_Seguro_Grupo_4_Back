@@ -1521,6 +1521,19 @@ async def transformar_archivo_excel(
     try:
         json_result = transformar_excel(contenido, hoja)
 
+        # VALIDACIÓN: Calcular presupuesto total del Excel
+        presupuesto_total_excel = sum(
+            float(actividad["total_por_actividad"])
+            for actividad in json_result["actividades"]
+        )
+
+        # Validar que no exceda el presupuesto asignado al POA
+        if presupuesto_total_excel > float(poa.presupuesto_asignado):
+            raise HTTPException(
+                status_code=400,
+                detail=f"El presupuesto total del archivo Excel (${presupuesto_total_excel:,.2f}) excede el presupuesto asignado al POA (${float(poa.presupuesto_asignado):,.2f}). Diferencia: ${(presupuesto_total_excel - float(poa.presupuesto_asignado)):,.2f}"
+            )
+
         if actividades_existentes:
             if not confirmacion:
                 # Si no hay confirmación, enviar mensaje al frontend
