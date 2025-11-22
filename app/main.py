@@ -674,6 +674,7 @@ async def crear_proyecto(
         titulo=data.titulo,
         id_tipo_proyecto=data.id_tipo_proyecto,
         id_estado_proyecto=data.id_estado_proyecto,
+        id_departamento=data.id_departamento,
         id_director_proyecto=data.id_director_proyecto,
         fecha_creacion=data.fecha_creacion,
         fecha_inicio=data.fecha_inicio,
@@ -725,7 +726,7 @@ async def editar_proyecto(
         # Campos a auditar
         campos_auditar = [
             "codigo_proyecto", "titulo", "id_tipo_proyecto", "id_estado_proyecto",
-            "fecha_creacion", "fecha_inicio", "fecha_fin", "fecha_prorroga",
+            "id_departamento", "fecha_creacion", "fecha_inicio", "fecha_fin", "fecha_prorroga",
             "fecha_prorroga_inicio", "fecha_prorroga_fin", "presupuesto_aprobado",
             "id_director_proyecto"
         ]
@@ -879,6 +880,11 @@ async def listar_tipos_proyecto(db: AsyncSession = Depends(get_db)):
 @app.get("/estados-proyecto/", response_model=List[schemas.EstadoProyectoOut])
 async def listar_estados_proyecto(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(models.EstadoProyecto))
+    return result.scalars().all()
+
+@app.get("/departamentos/", response_model=List[schemas.DepartamentoOut])
+async def listar_departamentos(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.Departamento))
     return result.scalars().all()
 
 #actividades

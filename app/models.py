@@ -38,6 +38,13 @@ class EstadoProyecto(Base):
     descripcion = Column(String(500))
     permite_edicion = Column(Boolean, nullable=False, default=True)
 
+class Departamento(Base):
+    __tablename__ = "DEPARTAMENTO"
+
+    id_departamento = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    nombre = Column(String(100), nullable=False)
+    descripcion = Column(String(500))
+
 
 class Rol(Base):
     __tablename__ = "ROL"
@@ -68,6 +75,7 @@ class Proyecto(Base):
     titulo = Column(String(2000), nullable=False)
     id_tipo_proyecto = Column(UUID(as_uuid=True), ForeignKey("TIPO_PROYECTO.id_tipo_proyecto"), nullable=False)
     id_estado_proyecto = Column(UUID(as_uuid=True), ForeignKey("ESTADO_PROYECTO.id_estado_proyecto"), nullable=False)
+    id_departamento = Column(UUID(as_uuid=True), ForeignKey("DEPARTAMENTO.id_departamento"), nullable=True)
     id_director_proyecto = Column(String(200), nullable=True)
     presupuesto_aprobado = Column(DECIMAL(18, 2))
     fecha_creacion = Column(DateTime, nullable=False)
@@ -79,6 +87,7 @@ class Proyecto(Base):
 
     tipo_proyecto = relationship("TipoProyecto")
     estado_proyecto = relationship("EstadoProyecto")
+    departamento = relationship("Departamento")
     # director = relationship("Usuario", back_populates="proyectos_dirigidos", foreign_keys=[id_director_proyecto])
 
 class Periodo(Base):

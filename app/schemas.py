@@ -220,6 +220,7 @@ class ProyectoCreate(BaseModel):
     titulo: constr(min_length=10, max_length=2000, strip_whitespace=True)
     id_tipo_proyecto: UUID
     id_estado_proyecto: UUID
+    id_departamento: Optional[UUID] = None
     id_director_proyecto: Optional[constr(min_length=5, max_length=200)] = None
     fecha_creacion: datetime
     fecha_inicio: Optional[date] = None
@@ -283,6 +284,7 @@ class ProyectoOut(BaseModel):
     titulo: str
     id_tipo_proyecto: UUID
     id_estado_proyecto: UUID
+    id_departamento: Optional[UUID] = None
     id_director_proyecto: Optional[str] = None
     fecha_creacion: datetime
     fecha_inicio: Optional[date] = None
@@ -320,6 +322,14 @@ class EstadoProyectoOut(BaseModel):
     id_estado_proyecto: UUID
     nombre: str
     descripcion: str
+
+    class Config:
+        from_attributes = True
+
+class DepartamentoOut(BaseModel):
+    id_departamento: UUID
+    nombre: str
+    descripcion: Optional[str] = None
 
     class Config:
         from_attributes = True

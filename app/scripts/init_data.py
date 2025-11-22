@@ -4,17 +4,18 @@ para el funcionamiento del sistema.
 import uuid
 from app.database import SessionLocal
 from app.models import (
-    Rol, 
-    Permiso, 
-    PermisoRol, 
-    TipoPOA, 
-    TipoProyecto, 
-    EstadoProyecto, 
-    EstadoPOA, 
+    Rol,
+    Permiso,
+    PermisoRol,
+    TipoPOA,
+    TipoProyecto,
+    EstadoProyecto,
+    EstadoPOA,
     LimiteProyectosTipo,
     ItemPresupuestario,
     DetalleTarea,
-    TipoPoaDetalleTarea
+    TipoPoaDetalleTarea,
+    Departamento
     )
 
 from sqlalchemy.future import select
@@ -247,6 +248,50 @@ async def seed_all_data():
 
     if nuevos_estados:
         db.add_all(nuevos_estados)
+        await db.commit()
+
+    # ─────────────────────────────────────────────────────────────────────────────
+    # Insertar en DEPARTAMENTO
+    # ─────────────────────────────────────────────────────────────────────────────
+    result = await db.execute(select(Departamento.nombre))
+    departamentos_existentes = set(result.scalars().all())
+
+    departamentos = [
+        {"nombre": "Departamento 1", "desc": "Departamento 1 de la institución"},
+        {"nombre": "Departamento 2", "desc": "Departamento 2 de la institución"},
+        {"nombre": "Departamento 3", "desc": "Departamento 3 de la institución"},
+        {"nombre": "Departamento 4", "desc": "Departamento 4 de la institución"},
+        {"nombre": "Departamento 5", "desc": "Departamento 5 de la institución"},
+        {"nombre": "Departamento 6", "desc": "Departamento 6 de la institución"},
+        {"nombre": "Departamento 7", "desc": "Departamento 7 de la institución"},
+        {"nombre": "Departamento 8", "desc": "Departamento 8 de la institución"},
+        {"nombre": "Departamento 9", "desc": "Departamento 9 de la institución"},
+        {"nombre": "Departamento 10", "desc": "Departamento 10 de la institución"},
+        {"nombre": "Departamento 11", "desc": "Departamento 11 de la institución"},
+        {"nombre": "Departamento 12", "desc": "Departamento 12 de la institución"},
+        {"nombre": "Departamento 13", "desc": "Departamento 13 de la institución"},
+        {"nombre": "Departamento 14", "desc": "Departamento 14 de la institución"},
+        {"nombre": "Departamento 15", "desc": "Departamento 15 de la institución"},
+        {"nombre": "Departamento 16", "desc": "Departamento 16 de la institución"},
+        {"nombre": "Departamento 17", "desc": "Departamento 17 de la institución"},
+        {"nombre": "Departamento 18", "desc": "Departamento 18 de la institución"},
+        {"nombre": "Departamento 19", "desc": "Departamento 19 de la institución"},
+        {"nombre": "Departamento 20", "desc": "Departamento 20 de la institución"},
+        {"nombre": "Departamento 21", "desc": "Departamento 21 de la institución"},
+        {"nombre": "Departamento 22", "desc": "Departamento 22 de la institución"},
+    ]
+
+    nuevos_departamentos = [
+        Departamento(
+            id_departamento=uuid.uuid4(),
+            nombre=d["nombre"],
+            descripcion=d["desc"]
+        )
+        for d in departamentos if d["nombre"] not in departamentos_existentes
+    ]
+
+    if nuevos_departamentos:
+        db.add_all(nuevos_departamentos)
         await db.commit()
 
     # ─────────────────────────────────────────────────────────────────────────────

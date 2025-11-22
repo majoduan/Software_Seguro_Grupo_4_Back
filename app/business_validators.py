@@ -67,6 +67,20 @@ async def validate_proyecto_business_rules(
             detail="Estado de proyecto no encontrado"
         )
 
+    # Validar que el departamento existe (si se proporciona)
+    if hasattr(data, 'id_departamento') and data.id_departamento is not None:
+        result = await db.execute(
+            select(models.Departamento).where(
+                models.Departamento.id_departamento == data.id_departamento
+            )
+        )
+        departamento = result.scalars().first()
+        if not departamento:
+            raise HTTPException(
+                status_code=404,
+                detail="Departamento no encontrado"
+            )
+
     # Validar código único (solo en creación o si cambió el código)
     query = select(models.Proyecto).where(
         models.Proyecto.codigo_proyecto == data.codigo_proyecto
