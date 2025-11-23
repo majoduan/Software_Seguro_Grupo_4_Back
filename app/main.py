@@ -977,8 +977,12 @@ async def crear_tarea(
     if not detalle:
         raise HTTPException(status_code=404, detail="Detalle de tarea no encontrado")
 
-    cantidad = data.cantidad or Decimal("0")
-    precio_unitario = data.precio_unitario or Decimal("0")
+    # DEBUG: Imprimir valores recibidos
+    print(f"DEBUG crear_tarea - data.cantidad: {data.cantidad}, type: {type(data.cantidad)}")
+    print(f"DEBUG crear_tarea - data.precio_unitario: {data.precio_unitario}, type: {type(data.precio_unitario)}")
+
+    cantidad = data.cantidad if data.cantidad is not None else Decimal("0")
+    precio_unitario = data.precio_unitario if data.precio_unitario is not None else Decimal("0")
     total = precio_unitario * cantidad
 
     # Obtener el POA para validar contra su presupuesto
