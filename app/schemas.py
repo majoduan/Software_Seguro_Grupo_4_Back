@@ -441,7 +441,7 @@ class TareaOut(BaseModel):
         from_attributes = True
 
 class TareaUpdate(BaseModel):
-    cantidad: condecimal(gt=0)
+    cantidad: condecimal(ge=0)
     precio_unitario: condecimal(gt=0)
     lineaPaiViiv: Optional[int] = None  # ← nuevo campo
 
@@ -493,13 +493,13 @@ class TareaCreateReforma(BaseModel):
     id_detalle_tarea: UUID
     nombre: Optional[str]
     detalle_descripcion: Optional[str]
-    cantidad: condecimal(gt=0)
+    cantidad: condecimal(ge=0)
     precio_unitario: condecimal(gt=0)
     justificacion: str
     lineaPaiViiv: Optional[int] = None
 
 class TareaEditReforma(BaseModel):
-    cantidad: Optional[condecimal(gt=0)]
+    cantidad: Optional[condecimal(ge=0)]
     precio_unitario: Optional[condecimal(gt=0)]
     justificacion: str
     lineaPaiViiv: Optional[int] = None
