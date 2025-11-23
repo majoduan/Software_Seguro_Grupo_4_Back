@@ -27,7 +27,8 @@ async def validate_proyecto_business_rules(
     Valida las reglas de negocio para proyectos.
 
     Reglas (replicadas del frontend):
-    - Código de proyecto único
+    - Título de proyecto único (el código puede repetirse)
+    - Título máximo 100 caracteres
     - Presupuesto <= presupuesto_maximo del tipo de proyecto
     - Duración <= duracion_meses del tipo de proyecto
     - Tipo de proyecto existe
@@ -81,9 +82,9 @@ async def validate_proyecto_business_rules(
                 detail="Departamento no encontrado"
             )
 
-    # Validar código único (solo en creación o si cambió el código)
+    # Validar título único (el código se puede repetir, pero el nombre del proyecto debe ser único)
     query = select(models.Proyecto).where(
-        models.Proyecto.codigo_proyecto == data.codigo_proyecto
+        models.Proyecto.titulo == data.titulo
     )
     if proyecto_id:
         query = query.where(models.Proyecto.id_proyecto != proyecto_id)
@@ -92,7 +93,7 @@ async def validate_proyecto_business_rules(
     if result.scalars().first():
         raise HTTPException(
             status_code=400,
-            detail=f"Ya existe un proyecto con el código '{data.codigo_proyecto}'"
+            detail=f"Ya existe un proyecto con el nombre '{data.titulo}'"
         )
 
     # Validar presupuesto <= presupuesto_maximo del tipo

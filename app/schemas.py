@@ -210,14 +210,14 @@ class ProyectoCreate(BaseModel):
 
     Validaciones replicadas del frontend:
     - codigo_proyecto: 5-50 caracteres
-    - titulo: 10-2000 caracteres
+    - titulo: 10-100 caracteres (nombre del proyecto único)
     - id_director_proyecto: 2-8 palabras, solo letras + acentos
     - presupuesto_aprobado: > 0
     - fecha_fin >= fecha_inicio
     - fechas de prórroga coherentes
     """
     codigo_proyecto: constr(min_length=5, max_length=50, strip_whitespace=True)
-    titulo: constr(min_length=10, max_length=2000, strip_whitespace=True)
+    titulo: constr(min_length=10, max_length=100, strip_whitespace=True)
     id_tipo_proyecto: UUID
     id_estado_proyecto: UUID
     id_departamento: Optional[UUID] = None
