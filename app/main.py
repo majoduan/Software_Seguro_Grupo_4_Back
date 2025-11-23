@@ -981,28 +981,42 @@ async def crear_tarea(
     precio_unitario = data.precio_unitario or Decimal("0")
     total = precio_unitario * cantidad
 
-    # VALIDACIÓN: Obtener suma de tareas existentes de la actividad
+    # Obtener el POA para validar contra su presupuesto
     result = await db.execute(
-        select(models.Tarea).where(models.Tarea.id_actividad == id_actividad)
+        select(models.Poa).where(models.Poa.id_poa == actividad.id_poa)
     )
-    tareas_existentes = result.scalars().all()
-    suma_tareas_existente = sum(
-        float(tarea.total or 0)
-        for tarea in tareas_existentes
+    poa = result.scalars().first()
+
+    # Obtener suma de TODAS las tareas del POA (de todas las actividades)
+    result = await db.execute(
+        select(models.Actividad).where(models.Actividad.id_poa == actividad.id_poa)
     )
+    actividades_poa = result.scalars().all()
 
-    nueva_suma_tareas = suma_tareas_existente + float(total)
-    presupuesto_actividad = float(actividad.total_por_actividad or 0)
+    suma_total_tareas_poa = Decimal("0")
+    for act in actividades_poa:
+        result_tareas = await db.execute(
+            select(models.Tarea).where(models.Tarea.id_actividad == act.id_actividad)
+        )
+        tareas_act = result_tareas.scalars().all()
+        suma_total_tareas_poa += sum(
+            (tarea.total or Decimal("0"))
+            for tarea in tareas_act
+        )
 
-    if nueva_suma_tareas > presupuesto_actividad:
-        diferencia = nueva_suma_tareas - presupuesto_actividad
+    # Validar que la nueva tarea no exceda el presupuesto del POA
+    nueva_suma_total = suma_total_tareas_poa + total
+    presupuesto_poa = Decimal(str(poa.presupuesto_asignado or 0))
+
+    if nueva_suma_total > presupuesto_poa:
+        diferencia = nueva_suma_total - presupuesto_poa
         raise HTTPException(
             status_code=400,
             detail=(
-                f"La suma de tareas (${nueva_suma_tareas:,.2f}) excedería "
-                f"el presupuesto de la actividad (${presupuesto_actividad:,.2f}). "
-                f"Diferencia: ${diferencia:,.2f}. "
-                f"Presupuesto disponible: ${presupuesto_actividad - suma_tareas_existente:,.2f}"
+                f"La suma total de tareas del POA (${float(nueva_suma_total):,.2f}) excedería "
+                f"el presupuesto asignado al POA (${float(presupuesto_poa):,.2f}). "
+                f"Diferencia: ${float(diferencia):,.2f}. "
+                f"Presupuesto disponible: ${float(presupuesto_poa - suma_total_tareas_poa):,.2f}"
             )
         )
 
@@ -1019,11 +1033,12 @@ async def crear_tarea(
         lineaPaiViiv=data.lineaPaiViiv
     )
 
-    # NOTA: NO modificamos total_por_actividad ni saldo_actividad
-    # El presupuesto de la actividad es FIJO (viene del Excel o se define al crear)
-    # Solo validamos que la suma de tareas no exceda ese límite
-
     db.add(nueva_tarea)
+
+    # Actualizar total_por_actividad y saldo_actividad de la actividad
+    actividad.total_por_actividad = (actividad.total_por_actividad or Decimal("0")) + total
+    actividad.saldo_actividad = (actividad.saldo_actividad or Decimal("0")) + total
+
     await db.commit()
     await db.refresh(nueva_tarea)
 
@@ -1061,6 +1076,11 @@ async def eliminar_tarea(
             id_reforma=None
         )
         db.add(historico)
+
+        # Actualizar total_por_actividad y saldo_actividad de la actividad
+        total_tarea = tarea.total or Decimal("0")
+        actividad.total_por_actividad = (actividad.total_por_actividad or Decimal("0")) - total_tarea
+        actividad.saldo_actividad = (actividad.saldo_actividad or Decimal("0")) - total_tarea
 
     await db.delete(tarea)
     await db.commit()
@@ -1146,29 +1166,45 @@ async def editar_tarea(
         cantidad = tarea.cantidad or Decimal("0")
         precio_unitario = tarea.precio_unitario or Decimal("0")
         nuevo_total = precio_unitario * cantidad
+        total_anterior = tarea.total or Decimal("0")
+        diferencia_total = nuevo_total - total_anterior
 
-        # VALIDACIÓN: Verificar que la suma de tareas no exceda el presupuesto de la actividad
-        # Obtener todas las tareas de la actividad (excluyendo la actual)
+        # Obtener el POA para validar contra su presupuesto
         result = await db.execute(
-            select(models.Tarea).where(
-                models.Tarea.id_actividad == actividad.id_actividad,
-                models.Tarea.id_tarea != id_tarea
-            )
+            select(models.Poa).where(models.Poa.id_poa == actividad.id_poa)
         )
-        otras_tareas = result.scalars().all()
+        poa = result.scalars().first()
 
-        suma_otras_tareas = sum(float(t.total or 0) for t in otras_tareas)
-        nueva_suma_total = suma_otras_tareas + float(nuevo_total)
-        presupuesto_actividad = float(actividad.total_por_actividad or 0)
+        # Obtener suma de TODAS las tareas del POA (de todas las actividades)
+        result = await db.execute(
+            select(models.Actividad).where(models.Actividad.id_poa == actividad.id_poa)
+        )
+        actividades_poa = result.scalars().all()
 
-        if nueva_suma_total > presupuesto_actividad:
-            diferencia = nueva_suma_total - presupuesto_actividad
+        suma_total_tareas_poa = Decimal("0")
+        for act in actividades_poa:
+            result_tareas = await db.execute(
+                select(models.Tarea).where(models.Tarea.id_actividad == act.id_actividad)
+            )
+            tareas_act = result_tareas.scalars().all()
+            for t in tareas_act:
+                # Si es la tarea que estamos editando, usar el nuevo total
+                if t.id_tarea == id_tarea:
+                    suma_total_tareas_poa += nuevo_total
+                else:
+                    suma_total_tareas_poa += (t.total or Decimal("0"))
+
+        # Validar que la modificación no exceda el presupuesto del POA
+        presupuesto_poa = Decimal(str(poa.presupuesto_asignado or 0))
+
+        if suma_total_tareas_poa > presupuesto_poa:
+            diferencia = suma_total_tareas_poa - presupuesto_poa
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    f"La modificación haría que la suma de tareas (${nueva_suma_total:,.2f}) "
-                    f"exceda el presupuesto de la actividad (${presupuesto_actividad:,.2f}). "
-                    f"Diferencia: ${diferencia:,.2f}"
+                    f"La modificación haría que la suma total de tareas del POA (${float(suma_total_tareas_poa):,.2f}) "
+                    f"exceda el presupuesto asignado al POA (${float(presupuesto_poa):,.2f}). "
+                    f"Diferencia: ${float(diferencia):,.2f}"
                 )
             )
 
@@ -1176,9 +1212,9 @@ async def editar_tarea(
         tarea.total = nuevo_total
         tarea.saldo_disponible = nuevo_total
 
-        # NOTA: NO modificamos total_por_actividad ni saldo_actividad
-        # El presupuesto de la actividad es FIJO (viene del Excel o se define al crear)
-        # Solo validamos que la suma de tareas no exceda ese límite
+        # Actualizar total_por_actividad y saldo_actividad de la actividad
+        actividad.total_por_actividad = (actividad.total_por_actividad or Decimal("0")) + diferencia_total
+        actividad.saldo_actividad = (actividad.saldo_actividad or Decimal("0")) + diferencia_total
 
         await db.commit()
         await db.refresh(tarea)
