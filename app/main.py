@@ -1910,26 +1910,54 @@ async def transformar_archivo_excel(
                 # Guardar programaciones mensuales si existen y no es solo "suman"
                 prog_ejec = tarea.get("programacion_ejecucion", {})
                 for fecha, valor in prog_ejec.items():
-                    # ...dentro del for fecha, valor in prog_ejec.items()...
                     if fecha == "suman":
                         continue
                     try:
-                        # Extraer el mes y convertirlo a nombre en español
-                        mes_num = int(fecha[5:7])  # "2025-03-01..." -> 3
-                        meses_es = [
-                            "enero", "febrero", "marzo", "abril", "mayo", "junio",
-                            "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
-                        ]
-                        mes_nombre = meses_es[mes_num - 1]
+                        # Extraer el mes y año de la fecha en múltiples formatos posibles
+                        fecha_str = str(fecha)
+                        mes_num = None
+                        anio = None
+
+                        # Intentar formato YYYY-MM-DD o YYYY-MM-DD HH:MM:SS
+                        if len(fecha_str) >= 10 and fecha_str[4] == '-':
+                            mes_num = int(fecha_str[5:7])
+                            anio = int(fecha_str[0:4])
+                        # Intentar formato DD/MM/YYYY
+                        elif len(fecha_str) >= 10 and fecha_str[2] == '/':
+                            mes_num = int(fecha_str[3:5])
+                            anio = int(fecha_str[6:10])
+                        # Intentar parsear con datetime como último recurso
+                        else:
+                            from datetime import datetime as dt
+                            for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S"]:
+                                try:
+                                    parsed_date = dt.strptime(fecha_str.split()[0] if ' ' in fecha_str else fecha_str, fmt.split()[0])
+                                    mes_num = parsed_date.month
+                                    anio = parsed_date.year
+                                    break
+                                except ValueError:
+                                    continue
+
+                        if mes_num is None or mes_num < 1 or mes_num > 12:
+                            print(f"Error: No se pudo extraer el mes de la fecha '{fecha_str}'")
+                            continue
+
+                        # Usar año actual si no se pudo extraer
+                        if anio is None:
+                            anio = datetime.now().year
+
+                        # Formato MM-YYYY para coincidir con el frontend
+                        mes_formateado = f"{str(mes_num).zfill(2)}-{anio}"
                         valor_float = float(valor)
                         nueva_prog = models.ProgramacionMensual(
                             id_programacion=uuid.uuid4(),
                             id_tarea=nueva_tarea.id_tarea,
-                            mes=mes_nombre,  # Guardar el nombre del mes
+                            mes=mes_formateado,  # Guardar en formato MM-YYYY
                             valor=valor_float
                         )
                         db.add(nueva_prog)
                     except Exception as e:
+                        print(f"Error al procesar programación mensual para fecha '{fecha}': {str(e)}")
                         continue
                 await db.commit()
             # Confirmar las tareas después de agregarlas
