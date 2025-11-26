@@ -2032,6 +2032,7 @@ async def obtener_item_presupuestario_de_tarea(
 async def reporte_poa(
     anio: str = Form(...),
     tipo_proyecto: str = Form(...),
+    id_departamento: str = Form(None),
     db: AsyncSession = Depends(get_db)
 ):
     # Determinar códigos de tipo de proyecto
@@ -2053,11 +2054,12 @@ async def reporte_poa(
     tipos_proyecto = result.scalars().all()
     ids_tipo_proyecto = [tp.id_tipo_proyecto for tp in tipos_proyecto]
 
-    # Buscar proyectos de esos tipos
-    result = await db.execute(
-        select(models.Proyecto)
-        .where(models.Proyecto.id_tipo_proyecto.in_(ids_tipo_proyecto))
-    )
+    # Buscar proyectos de esos tipos, con filtro por departamento si se proporciona
+    query = select(models.Proyecto).where(models.Proyecto.id_tipo_proyecto.in_(ids_tipo_proyecto))
+    if id_departamento:
+        query = query.where(models.Proyecto.id_departamento == id_departamento)
+    
+    result = await db.execute(query)
     proyectos = result.scalars().all()
     ids_proyecto = [p.id_proyecto for p in proyectos]
 
