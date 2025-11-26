@@ -1698,6 +1698,103 @@ async def historial_poa(
     )
     return result.scalars().all()
 
+@app.get("/historico-proyectos/", response_model=List[schemas.HistoricoProyectoOut])
+async def obtener_historico_proyectos(
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000)
+):
+    """Obtener todos los históricos de proyectos con paginación"""
+    result = await db.execute(
+        select(models.HistoricoProyecto)
+        .order_by(models.HistoricoProyecto.fecha_modificacion.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    historicos = result.scalars().all()
+    
+    # Enriquecer con información del usuario y proyecto
+    respuesta = []
+    for historico in historicos:
+        # Obtener usuario
+        usuario_result = await db.execute(
+            select(models.Usuario).where(models.Usuario.id_usuario == historico.id_usuario)
+        )
+        usuario_obj = usuario_result.scalars().first()
+        
+        # Obtener proyecto
+        proyecto_result = await db.execute(
+            select(models.Proyecto).where(models.Proyecto.id_proyecto == historico.id_proyecto)
+        )
+        proyecto_obj = proyecto_result.scalars().first()
+        
+        respuesta.append({
+            "id_historico": historico.id_historico,
+            "id_proyecto": historico.id_proyecto,
+            "campo_modificado": historico.campo_modificado,
+            "valor_anterior": historico.valor_anterior,
+            "valor_nuevo": historico.valor_nuevo,
+            "justificacion": historico.justificacion,
+            "fecha_modificacion": historico.fecha_modificacion,
+            "usuario": usuario_obj.nombre_usuario if usuario_obj else "Desconocido",
+            "codigo_proyecto": proyecto_obj.codigo_proyecto if proyecto_obj else None
+        })
+    return respuesta
+
+@app.get("/historico-poas/", response_model=List[schemas.HistoricoPoaOut])
+async def obtener_historico_poas(
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000)
+):
+    """Obtener todos los históricos de POAs con paginación"""
+    result = await db.execute(
+        select(models.HistoricoPoa)
+        .order_by(models.HistoricoPoa.fecha_modificacion.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    historicos = result.scalars().all()
+    
+    # Enriquecer con información del usuario, POA y proyecto
+    respuesta = []
+    for historico in historicos:
+        # Obtener usuario
+        usuario_result = await db.execute(
+            select(models.Usuario).where(models.Usuario.id_usuario == historico.id_usuario)
+        )
+        usuario_obj = usuario_result.scalars().first()
+        
+        # Obtener POA
+        poa_result = await db.execute(
+            select(models.Poa).where(models.Poa.id_poa == historico.id_poa)
+        )
+        poa_obj = poa_result.scalars().first()
+        
+        # Obtener proyecto si existe POA
+        proyecto_obj = None
+        if poa_obj:
+            proyecto_result = await db.execute(
+                select(models.Proyecto).where(models.Proyecto.id_proyecto == poa_obj.id_proyecto)
+            )
+            proyecto_obj = proyecto_result.scalars().first()
+        
+        respuesta.append({
+            "id_historico": historico.id_historico,
+            "id_poa": historico.id_poa,
+            "campo_modificado": historico.campo_modificado,
+            "valor_anterior": historico.valor_anterior,
+            "valor_nuevo": historico.valor_nuevo,
+            "justificacion": historico.justificacion,
+            "fecha_modificacion": historico.fecha_modificacion,
+            "usuario": usuario_obj.nombre_usuario if usuario_obj else "Desconocido",
+            "codigo_poa": poa_obj.codigo_poa if poa_obj else None,
+            "codigo_proyecto": proyecto_obj.codigo_proyecto if proyecto_obj else None
+        })
+    return respuesta
+
 
 @app.get("/proyectos/{id_proyecto}/poas", response_model=List[schemas.PoaOut])
 async def obtener_poas_por_proyecto(

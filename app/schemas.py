@@ -505,12 +505,30 @@ class TareaEditReforma(BaseModel):
     lineaPaiViiv: Optional[int] = None
 
 class HistoricoPoaOut(BaseModel):
+    id_historico: UUID
+    id_poa: UUID
+    campo_modificado: str
+    valor_anterior: Optional[str]
+    valor_nuevo: Optional[str]
+    justificacion: str
+    fecha_modificacion: datetime
+    usuario: Optional[str] = None  # Opcional para compatibilidad con endpoint original
+    codigo_poa: Optional[str] = None
+    codigo_proyecto: Optional[str] = None
+
+    class Config:
+        orm_mode = True
+
+class HistoricoProyectoOut(BaseModel):
+    id_historico: UUID
+    id_proyecto: UUID
     campo_modificado: str
     valor_anterior: Optional[str]
     valor_nuevo: Optional[str]
     justificacion: str
     fecha_modificacion: datetime
     usuario: str
+    codigo_proyecto: Optional[str] = None
 
     class Config:
         orm_mode = True
