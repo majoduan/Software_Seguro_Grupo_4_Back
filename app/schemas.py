@@ -409,6 +409,7 @@ class DetalleTareaOut(BaseModel):
     descripcion: Optional[str]
     caracteristicas: Optional[str]  # Nuevo campo para información específica de la tarea
     id_item_presupuestario: Optional[UUID]  # Nuevo campo agregado
+    precio_unitario: Optional[condecimal(max_digits=10, decimal_places=2)] = None  # Precio predefinido (solo para servicios profesionales)
 
     class Config:
         from_attributes = True

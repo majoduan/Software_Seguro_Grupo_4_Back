@@ -423,12 +423,13 @@ async def seed_all_data():
 
     # Definir los detalles de tarea con sus asociaciones específicas
     detalles_con_asociaciones = [
-        # Código 730606 - Contratación de servicios profesionales (4 detalles diferentes)
+        # Código 730606 - Contratación de servicios profesionales (4 detalles diferentes con precios predefinidos)
         {
             "codigo": "730606",
             "nombre": "Contratación de servicios profesionales",
             "descripcion": "Asistente de investigación",
             "características": "1.1; 1.1; 1.1",
+            "precio_unitario": 986,
             "asociaciones": {
                 "PIM": ["1.1"], "PTT": ["1.1"], "PVIF": ["1.1"], "PVIS": ["1.1"], "PIGR": ["1.1"], "PIS": ["1.1"], "PIIF": ["1.1"]
             }
@@ -438,6 +439,7 @@ async def seed_all_data():
             "nombre": "Contratación de servicios profesionales",
             "descripcion": "Servicios profesionales 1",
             "características": "1.2; 1.2; 1.2",
+            "precio_unitario": 1212,
             "asociaciones": {
                 "PIM": ["1.2"], "PTT": ["1.2"], "PVIF": ["1.2"], "PVIS": ["1.2"], "PIGR": ["1.2"], "PIS": ["1.2"], "PIIF": ["1.2"]
             }
@@ -447,6 +449,7 @@ async def seed_all_data():
             "nombre": "Contratación de servicios profesionales",
             "descripcion": "Servicios profesionales 2",
             "características": "1.3; 1.3; 1.3",
+            "precio_unitario": 1412,
             "asociaciones": {
                 "PIM": ["1.3"], "PTT": ["1.3"], "PVIF": ["1.3"], "PVIS": ["1.3"], "PIGR": ["1.3"], "PIS": ["1.3"], "PIIF": ["1.3"]
             }
@@ -456,6 +459,7 @@ async def seed_all_data():
             "nombre": "Contratación de servicios profesionales",
             "descripcion": "Servicios profesionales 3",
             "características": "1.4; 1.4; 1.4",
+            "precio_unitario": 1676,
             "asociaciones": {
                 "PIM": ["1.4"], "PTT": ["1.4"], "PVIF": ["1.4"], "PVIS": ["1.4"], "PIGR": ["1.4"], "PIS": ["1.4"], "PIIF": ["1.4"]
             }
@@ -727,7 +731,7 @@ async def seed_all_data():
         return result.scalars().first()
 
     # Función para crear DetalleTarea si no existe
-    async def crear_detalle_tarea_si_no_existe(db, item_presupuestario, nombre, descripcion, características):
+    async def crear_detalle_tarea_si_no_existe(db, item_presupuestario, nombre, descripcion, características, precio_unitario=None):
         result = await db.execute(
             select(DetalleTarea).where(
                 and_(
@@ -739,19 +743,25 @@ async def seed_all_data():
             )
         )
         detalle_existente = result.scalars().first()
-        
+
         if not detalle_existente:
             nuevo_detalle = DetalleTarea(
                 id_detalle_tarea=uuid.uuid4(),
                 id_item_presupuestario=item_presupuestario.id_item_presupuestario,
                 nombre=nombre,
                 descripcion=descripcion,
-                caracteristicas=características
+                caracteristicas=características,
+                precio_unitario=precio_unitario
             )
             db.add(nuevo_detalle)
             await db.flush()
             return nuevo_detalle
-        
+        else:
+            # Actualizar precio_unitario si ya existe el detalle y se proporciona un precio
+            if precio_unitario is not None and detalle_existente.precio_unitario != precio_unitario:
+                detalle_existente.precio_unitario = precio_unitario
+                await db.flush()
+
         return detalle_existente
 
     # Procesar todos los detalles y crear las asociaciones
@@ -768,11 +778,12 @@ async def seed_all_data():
         
         # Crear o obtener el DetalleTarea
         detalle_tarea = await crear_detalle_tarea_si_no_existe(
-            db, 
-            item_presupuestario, 
-            detalle_info["nombre"], 
+            db,
+            item_presupuestario,
+            detalle_info["nombre"],
             detalle_info["descripcion"],
-            detalle_info["características"]
+            detalle_info["características"],
+            detalle_info.get("precio_unitario")  # Obtener precio_unitario si existe en el diccionario
         )
         
         detalles_procesados += 1

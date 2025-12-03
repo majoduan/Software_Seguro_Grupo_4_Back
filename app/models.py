@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Boolean, Date, DateTime, DECIMAL, ForeignKey, Text, UniqueConstraint
+from sqlalchemy import Column, String, Integer, Boolean, Date, DateTime, DECIMAL, Numeric, ForeignKey, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
@@ -156,6 +156,7 @@ class DetalleTarea(Base):
     nombre = Column(String(500), nullable=False)
     descripcion = Column(String(500))
     caracteristicas = Column(String(500))
+    precio_unitario = Column(Numeric(10, 2), nullable=True)
 
     item_presupuestario = relationship("ItemPresupuestario", back_populates="detalles_tarea")
 
