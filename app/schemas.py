@@ -414,6 +414,62 @@ class DetalleTareaOut(BaseModel):
     class Config:
         from_attributes = True
 
+class DetalleTareaUpdatePrecio(BaseModel):
+    """
+    Schema para actualizar el precio de un detalle de tarea
+
+    Objetivo:
+        Validar y procesar la actualización del precio unitario de servicios profesionales
+        predefinidos (Asistente de investigación, Servicios profesionales 1/2/3).
+
+    Parámetros:
+        - precio_unitario (Decimal): Nuevo precio a asignar. Debe ser mayor a 100 y menor a 5000.
+
+    Validaciones:
+        - Tipo: Decimal con máximo 10 dígitos y 2 decimales
+        - Rango: 100 <= precio <= 5000
+
+    Retorna:
+        - Instancia validada del modelo con el precio sanitizado
+    """
+    precio_unitario: condecimal(gt=Decimal("100"), lt=Decimal("5000"), max_digits=10, decimal_places=2)
+
+    @field_validator('precio_unitario')
+    @classmethod
+    def validate_precio_range(cls, v):
+        if v <= Decimal("100"):
+            raise ValueError("El precio debe ser mayor a $100")
+        if v >= Decimal("5000"):
+            raise ValueError("El precio debe ser menor a $5,000")
+        return v
+
+class DetalleTareaPrecioOut(BaseModel):
+    """
+    Schema para mostrar detalles de tarea con información de precios editables
+
+    Objetivo:
+        Proporcionar información completa de un detalle de tarea incluyendo su
+        item presupuestario asociado, para la gestión de precios predefinidos.
+
+    Parámetros:
+        - id_detalle_tarea (UUID): Identificador único del detalle
+        - nombre (str): Nombre del detalle de tarea
+        - descripcion (str): Descripción del servicio profesional
+        - precio_unitario (Decimal): Precio predefinido actual (nullable)
+        - item_presupuestario (ItemPresupuestarioOut): Información del item presupuestario asociado
+
+    Retorna:
+        - Instancia del modelo con todos los datos necesarios para la UI de gestión de precios
+    """
+    id_detalle_tarea: UUID
+    nombre: str
+    descripcion: Optional[str]
+    precio_unitario: Optional[condecimal(max_digits=10, decimal_places=2)]
+    item_presupuestario: Optional['ItemPresupuestarioOut'] = None
+
+    class Config:
+        from_attributes = True
+
 class ActividadOut(BaseModel):
     id_actividad: UUID
     numero_actividad: Optional[int] = None  # Número de orden de la actividad

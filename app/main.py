@@ -1248,6 +1248,195 @@ async def obtener_detalles_tarea_poa(
     return result.scalars().all()
 
 
+# ==================== GESTIÓN DE PRECIOS PREDEFINIDOS ====================
+
+@app.get("/detalles-tarea/con-precios", response_model=List[schemas.DetalleTareaPrecioOut])
+async def listar_detalles_con_precios(
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    """
+    Listar detalles de tarea que tienen precios predefinidos
+
+    Objetivo:
+        Retornar únicamente los 4 servicios profesionales que tienen precios predefinidos,
+        incluyendo la información del item presupuestario asociado para la gestión de precios.
+
+    Parámetros:
+        - db (AsyncSession): Sesión de base de datos proporcionada por dependencia
+        - usuario (Usuario): Usuario autenticado (solo ADMINISTRADOR debe acceder)
+
+    Validaciones:
+        - Usuario debe estar autenticado
+        - Solo usuarios con rol ADMINISTRADOR pueden acceder (verificado en frontend y backend)
+
+    Operación:
+        - Consulta tabla DETALLE_TAREA filtrando registros con precio_unitario NOT NULL
+        - Hace join con ITEM_PRESUPUESTARIO para obtener código y nombre del item
+        - Ordena por código de item presupuestario y luego por descripción
+
+    Retorna:
+        - Lista de DetalleTareaPrecioOut con información completa de los 4 servicios
+
+    Errores:
+        - 401: Usuario no autenticado
+        - 403: Usuario no es ADMINISTRADOR (manejo en frontend)
+    """
+    # Verificar que el usuario sea ADMINISTRADOR
+    result_rol = await db.execute(
+        select(models.Rol).where(models.Rol.id_rol == usuario.id_rol)
+    )
+    rol = result_rol.scalars().first()
+    if not rol or rol.nombre_rol != "ADMINISTRADOR":
+        raise HTTPException(
+            status_code=403,
+            detail="Solo los administradores pueden gestionar precios predefinidos"
+        )
+
+    # Obtener detalles de tarea con precios predefinidos
+    result = await db.execute(
+        select(models.DetalleTarea)
+        .options(selectinload(models.DetalleTarea.item_presupuestario))
+        .where(models.DetalleTarea.precio_unitario.isnot(None))
+        .order_by(
+            models.DetalleTarea.nombre.asc(),
+            models.DetalleTarea.descripcion.asc()
+        )
+    )
+    detalles = result.scalars().all()
+
+    return detalles
+
+
+@app.get("/detalles-tarea/{id_detalle_tarea}", response_model=schemas.DetalleTareaPrecioOut)
+async def obtener_detalle_tarea_precio(
+    id_detalle_tarea: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    """
+    Obtener un detalle de tarea específico con información de precio
+
+    Objetivo:
+        Retornar información completa de un detalle de tarea individual, incluyendo
+        su item presupuestario asociado.
+
+    Parámetros:
+        - id_detalle_tarea (UUID): Identificador único del detalle de tarea
+        - db (AsyncSession): Sesión de base de datos
+        - usuario (Usuario): Usuario autenticado
+
+    Operación:
+        - Busca el detalle de tarea por ID
+        - Carga relación con item presupuestario
+
+    Retorna:
+        - DetalleTareaPrecioOut con toda la información del detalle
+
+    Errores:
+        - 401: Usuario no autenticado
+        - 404: Detalle de tarea no encontrado
+    """
+    result = await db.execute(
+        select(models.DetalleTarea)
+        .options(selectinload(models.DetalleTarea.item_presupuestario))
+        .where(models.DetalleTarea.id_detalle_tarea == id_detalle_tarea)
+    )
+    detalle = result.scalars().first()
+
+    if not detalle:
+        raise HTTPException(status_code=404, detail="Detalle de tarea no encontrado")
+
+    return detalle
+
+
+@app.put("/detalles-tarea/{id_detalle_tarea}/precio", response_model=schemas.DetalleTareaPrecioOut)
+async def actualizar_precio_detalle_tarea(
+    id_detalle_tarea: uuid.UUID,
+    data: schemas.DetalleTareaUpdatePrecio,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    """
+    Actualizar el precio predefinido de un servicio profesional
+
+    Objetivo:
+        Permitir a administradores actualizar los precios predefinidos de los 4 servicios
+        profesionales. Los cambios solo afectan a tareas creadas DESPUÉS de la modificación.
+
+    Parámetros:
+        - id_detalle_tarea (UUID): Identificador del detalle a actualizar
+        - data (DetalleTareaUpdatePrecio): Schema con nuevo precio_unitario validado
+        - db (AsyncSession): Sesión de base de datos
+        - usuario (Usuario): Usuario autenticado (debe ser ADMINISTRADOR)
+
+    Validaciones:
+        - Usuario debe ser ADMINISTRADOR
+        - Detalle de tarea debe existir
+        - Detalle debe tener precio predefinido (verificar que precio_unitario no es NULL)
+        - Precio debe estar en rango $100 - $5,000 (validado en schema)
+
+    Operación:
+        - Verifica rol de usuario
+        - Busca detalle de tarea por ID
+        - Valida que sea un servicio profesional con precio predefinido
+        - Actualiza campo precio_unitario
+        - Commit a base de datos
+
+    Retorna:
+        - DetalleTareaPrecioOut con el precio actualizado
+
+    Errores:
+        - 401: Usuario no autenticado
+        - 403: Usuario no es ADMINISTRADOR
+        - 404: Detalle de tarea no encontrado
+        - 400: Detalle no tiene precio predefinido (no es servicio profesional)
+
+    Nota:
+        NO se crea registro en HistoricoPoa porque los precios predefinidos no afectan
+        directamente a POAs existentes. Solo las nuevas tareas creadas usarán el nuevo precio.
+    """
+    # Verificar que el usuario sea ADMINISTRADOR
+    result_rol = await db.execute(
+        select(models.Rol).where(models.Rol.id_rol == usuario.id_rol)
+    )
+    rol = result_rol.scalars().first()
+    if not rol or rol.nombre_rol != "ADMINISTRADOR":
+        raise HTTPException(
+            status_code=403,
+            detail="Solo los administradores pueden actualizar precios predefinidos"
+        )
+
+    # Buscar detalle de tarea
+    result = await db.execute(
+        select(models.DetalleTarea)
+        .options(selectinload(models.DetalleTarea.item_presupuestario))
+        .where(models.DetalleTarea.id_detalle_tarea == id_detalle_tarea)
+    )
+    detalle = result.scalars().first()
+
+    if not detalle:
+        raise HTTPException(status_code=404, detail="Detalle de tarea no encontrado")
+
+    # Verificar que el detalle tiene precio predefinido (es un servicio profesional)
+    if detalle.precio_unitario is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Este detalle de tarea no tiene precio predefinido y no puede ser editado"
+        )
+
+    # Actualizar precio
+    detalle.precio_unitario = data.precio_unitario
+
+    # Guardar cambios
+    await db.commit()
+    await db.refresh(detalle)
+
+    return detalle
+
+# ==================== FIN GESTIÓN DE PRECIOS ====================
+
+
 #actividades por poa
 @app.get("/poas/{id_poa}/actividades", response_model=List[schemas.ActividadOut])
 async def obtener_actividades_de_poa(
