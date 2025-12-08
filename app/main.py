@@ -545,6 +545,27 @@ async def editar_poa(
     if not estado:
         raise HTTPException(status_code=400, detail="Estado POA no encontrado")
 
+    # Verificar si el POA tiene actividades y tareas asignadas
+    # Si tiene, validar que el nuevo presupuesto no sea menor al total utilizado
+    result_actividades = await db.execute(
+        select(models.Actividad).where(models.Actividad.id_poa == id)
+    )
+    actividades = result_actividades.scalars().all()
+
+    if actividades:
+        # Calcular el presupuesto total utilizado (suma de todas las actividades)
+        total_utilizado = Decimal("0")
+        for actividad in actividades:
+            if actividad.total_por_actividad:
+                total_utilizado += actividad.total_por_actividad
+
+        # Validar que el nuevo presupuesto asignado no sea menor al total utilizado
+        if data.presupuesto_asignado < total_utilizado:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No se puede asignar un presupuesto de ${data.presupuesto_asignado:,.2f} porque el POA ya tiene actividades y tareas con un total de ${total_utilizado:,.2f}. El presupuesto asignado debe ser mayor o igual al presupuesto total utilizado."
+            )
+
     # Actualizar el POA
     poa.id_proyecto = data.id_proyecto
     poa.id_periodo = data.id_periodo
