@@ -1308,6 +1308,54 @@ async def listar_detalles_con_precios(
     return detalles
 
 
+@app.get("/debug/detalles-servicios-profesionales")
+async def debug_servicios_profesionales(
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    """
+    Endpoint temporal de diagnóstico para verificar estado de servicios profesionales.
+    ELIMINAR después de resolver el problema.
+    """
+    # Buscar TODOS los servicios profesionales (con y sin precio)
+    result = await db.execute(
+        select(models.DetalleTarea)
+        .options(selectinload(models.DetalleTarea.item_presupuestario))
+        .where(models.DetalleTarea.nombre.like("%Contratación de servicios profesionales%"))
+        .order_by(models.DetalleTarea.descripcion.asc())
+    )
+    todos_servicios = result.scalars().all()
+
+    # Separar por si tienen precio o no
+    con_precio = [d for d in todos_servicios if d.precio_unitario is not None]
+    sin_precio = [d for d in todos_servicios if d.precio_unitario is None]
+
+    return {
+        "total_servicios_profesionales": len(todos_servicios),
+        "con_precio_definido": len(con_precio),
+        "sin_precio_definido": len(sin_precio),
+        "servicios_con_precio": [
+            {
+                "id": str(d.id_detalle_tarea),
+                "nombre": d.nombre,
+                "descripcion": d.descripcion,
+                "precio": float(d.precio_unitario) if d.precio_unitario else None,
+                "item_codigo": d.item_presupuestario.codigo if d.item_presupuestario else None
+            }
+            for d in con_precio
+        ],
+        "servicios_sin_precio": [
+            {
+                "id": str(d.id_detalle_tarea),
+                "nombre": d.nombre,
+                "descripcion": d.descripcion,
+                "item_codigo": d.item_presupuestario.codigo if d.item_presupuestario else None
+            }
+            for d in sin_precio
+        ]
+    }
+
+
 @app.get("/detalles-tarea/{id_detalle_tarea}", response_model=schemas.DetalleTareaPrecioOut)
 async def obtener_detalle_tarea_precio(
     id_detalle_tarea: uuid.UUID,

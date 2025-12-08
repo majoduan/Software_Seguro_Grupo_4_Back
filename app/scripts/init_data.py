@@ -757,8 +757,9 @@ async def seed_all_data():
             await db.flush()
             return nuevo_detalle
         else:
-            # Actualizar precio_unitario si ya existe el detalle y se proporciona un precio
-            if precio_unitario is not None and detalle_existente.precio_unitario != precio_unitario:
+            # SOLO establecer precio_unitario si NO tiene uno previamente (NULL)
+            # Esto permite que los administradores editen precios sin que se sobrescriban en cada inicio
+            if precio_unitario is not None and detalle_existente.precio_unitario is None:
                 detalle_existente.precio_unitario = precio_unitario
                 await db.flush()
 
