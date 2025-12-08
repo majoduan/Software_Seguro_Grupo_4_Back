@@ -498,9 +498,15 @@ class TareaOut(BaseModel):
         from_attributes = True
 
 class TareaUpdate(BaseModel):
-    cantidad: condecimal(ge=0)
-    precio_unitario: condecimal(gt=0)
-    lineaPaiViiv: Optional[int] = None  # ← nuevo campo
+    """
+    Modelo para actualización de tareas existentes
+
+    IMPORTANTE: Permite cantidad = 0 para "limpiar" tareas sin eliminarlas.
+    Cuando cantidad = 0, el frontend envía precio_unitario = 0 automáticamente.
+    """
+    cantidad: condecimal(ge=0)  # Permite 0 para tareas "vacías"
+    precio_unitario: condecimal(ge=0)  # Permite 0 cuando cantidad = 0
+    lineaPaiViiv: Optional[int] = None
 
 
 #reformas
@@ -546,18 +552,30 @@ class ReformaPoaOut(ReformaPoaBase):
         orm_mode = True
 
 class TareaCreateReforma(BaseModel):
+    """
+    Modelo para crear tareas mediante reformas
+
+    IMPORTANTE: Permite cantidad = 0 y precio_unitario = 0 para consistencia
+    con el comportamiento de creación/edición normal de tareas.
+    """
     id_actividad: UUID
     id_detalle_tarea: UUID
     nombre: Optional[str]
     detalle_descripcion: Optional[str]
-    cantidad: condecimal(ge=0)
-    precio_unitario: condecimal(gt=0)
+    cantidad: condecimal(ge=0)  # Permite 0 para tareas "vacías"
+    precio_unitario: condecimal(ge=0)  # Permite 0 cuando cantidad = 0
     justificacion: str
     lineaPaiViiv: Optional[int] = None
 
 class TareaEditReforma(BaseModel):
-    cantidad: Optional[condecimal(ge=0)]
-    precio_unitario: Optional[condecimal(gt=0)]
+    """
+    Modelo para editar tareas mediante reformas
+
+    IMPORTANTE: Permite cantidad = 0 y precio_unitario = 0 para consistencia
+    con el comportamiento de creación/edición normal de tareas.
+    """
+    cantidad: Optional[condecimal(ge=0)]  # Permite 0 para tareas "vacías"
+    precio_unitario: Optional[condecimal(ge=0)]  # Permite 0 cuando cantidad = 0
     justificacion: str
     lineaPaiViiv: Optional[int] = None
 
