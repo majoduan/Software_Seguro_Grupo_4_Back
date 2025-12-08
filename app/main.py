@@ -2071,6 +2071,108 @@ async def obtener_poas_por_proyecto(
     poas = result.scalars().all()
     return poas
 
+@app.get("/proyectos/{id_proyecto}/resumen-poas", response_model=schemas.ResumenPoasOut)
+async def obtener_resumen_poas(
+    id_proyecto: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    """
+    Obtiene un resumen consolidado de todos los POAs de un proyecto
+    mostrando el total de gastos por actividad agrupado por POA.
+
+    Objetivo:
+        Proporcionar una vista consolidada de la distribución de gastos en un proyecto,
+        agrupada por POA y desglosada por actividad, sin incluir el detalle de tareas
+        ni la programación mensual.
+
+    Parámetros:
+        - id_proyecto (UUID): Identificador único del proyecto
+        - db (AsyncSession): Sesión de base de datos
+        - usuario (Usuario): Usuario autenticado
+
+    Operación:
+        1. Valida que el proyecto existe
+        2. Obtiene todos los POAs asociados al proyecto con sus actividades
+        3. Calcula totales por actividad, por POA y total del proyecto
+        4. Ordena actividades por numero_actividad
+        5. Ordena POAs por anio_poa
+
+    Retorna:
+        - ResumenPoasOut: Resumen consolidado con estructura:
+            * Información del proyecto (id, código, título)
+            * Lista de POAs con:
+                - Datos del POA (código, año, presupuesto)
+                - Total gastado y saldo disponible
+                - Lista de actividades con sus totales
+            * Total general del proyecto
+
+    Excepciones:
+        - HTTPException 404: Si el proyecto no existe
+    """
+    # Validar que el proyecto existe
+    result = await db.execute(
+        select(models.Proyecto).where(models.Proyecto.id_proyecto == id_proyecto)
+    )
+    proyecto = result.scalar_one_or_none()
+    if not proyecto:
+        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+
+    # Obtener POAs con sus actividades (sin tareas ni programación mensual)
+    result = await db.execute(
+        select(models.Poa)
+        .options(selectinload(models.Poa.actividades))
+        .where(models.Poa.id_proyecto == id_proyecto)
+        .order_by(models.Poa.anio_poa.asc())
+    )
+    poas = result.scalars().all()
+
+    # Estructurar respuesta
+    poas_resumen = []
+    total_proyecto = Decimal("0")
+
+    for poa in poas:
+        actividades_resumen = []
+        total_poa = Decimal("0")
+
+        # Ordenar actividades por numero_actividad
+        actividades_ordenadas = sorted(
+            poa.actividades,
+            key=lambda a: a.numero_actividad if a.numero_actividad is not None else 999999
+        )
+
+        for actividad in actividades_ordenadas:
+            total_actividad = actividad.total_por_actividad or Decimal("0")
+            actividades_resumen.append({
+                "numero_actividad": actividad.numero_actividad,
+                "descripcion_actividad": actividad.descripcion_actividad,
+                "total_actividad": total_actividad
+            })
+            total_poa += total_actividad
+
+        # Calcular saldo disponible del POA
+        saldo_disponible = (poa.presupuesto_asignado or Decimal("0")) - total_poa
+
+        poas_resumen.append({
+            "id_poa": poa.id_poa,
+            "codigo_poa": poa.codigo_poa,
+            "anio_poa": poa.anio_poa,
+            "presupuesto_asignado": poa.presupuesto_asignado or Decimal("0"),
+            "total_gastado": total_poa,
+            "saldo_disponible": saldo_disponible,
+            "actividades": actividades_resumen
+        })
+
+        total_proyecto += total_poa
+
+    return {
+        "id_proyecto": proyecto.id_proyecto,
+        "codigo_proyecto": proyecto.codigo_proyecto,
+        "titulo": proyecto.titulo,
+        "poas": poas_resumen,
+        "total_proyecto": total_proyecto
+    }
+
 @app.post("/transformar_excel/")
 async def transformar_archivo_excel(
     file: UploadFile = File(...),

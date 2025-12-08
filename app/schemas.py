@@ -662,3 +662,80 @@ class ProgramacionMensualOut(BaseModel):
 
     class Config:
         orm_mode = True
+
+# ==================== Resumen de POAs ====================
+
+class ActividadResumen(BaseModel):
+    """
+    Schema para mostrar resumen de una actividad (sin tareas ni programación mensual)
+
+    Objetivo:
+        Proporcionar información resumida de una actividad mostrando solo su número,
+        descripción y total gastado. Usado en el resumen consolidado de POAs.
+
+    Parámetros:
+        - numero_actividad (int, optional): Número de orden de la actividad
+        - descripcion_actividad (str): Descripción de la actividad
+        - total_actividad (Decimal): Total gastado en la actividad
+
+    Retorna:
+        - Instancia del modelo con datos resumidos de la actividad
+    """
+    numero_actividad: Optional[int] = None
+    descripcion_actividad: str
+    total_actividad: condecimal(max_digits=12, decimal_places=2)
+
+class PoaResumen(BaseModel):
+    """
+    Schema para mostrar resumen de un POA con sus actividades
+
+    Objetivo:
+        Proporcionar información consolidada de un POA mostrando presupuesto,
+        total gastado, saldo disponible y listado de actividades con sus totales.
+
+    Parámetros:
+        - id_poa (UUID): Identificador único del POA
+        - codigo_poa (str): Código del POA
+        - anio_poa (int): Año del POA
+        - presupuesto_asignado (Decimal): Presupuesto total asignado
+        - total_gastado (Decimal): Total gastado en todas las actividades
+        - saldo_disponible (Decimal): Presupuesto restante (asignado - gastado)
+        - actividades (List[ActividadResumen]): Listado de actividades con sus totales
+
+    Retorna:
+        - Instancia del modelo con resumen completo del POA
+    """
+    id_poa: UUID
+    codigo_poa: str
+    anio_poa: int
+    presupuesto_asignado: condecimal(max_digits=12, decimal_places=2)
+    total_gastado: condecimal(max_digits=12, decimal_places=2)
+    saldo_disponible: condecimal(max_digits=12, decimal_places=2)
+    actividades: List[ActividadResumen]
+
+class ResumenPoasOut(BaseModel):
+    """
+    Schema para mostrar resumen consolidado de todos los POAs de un proyecto
+
+    Objetivo:
+        Proporcionar una vista consolidada de todos los POAs de un proyecto,
+        mostrando información del proyecto y el desglose de gastos por POA y actividad.
+
+    Parámetros:
+        - id_proyecto (UUID): Identificador único del proyecto
+        - codigo_proyecto (str): Código del proyecto
+        - titulo (str): Título del proyecto
+        - poas (List[PoaResumen]): Listado de POAs con sus actividades y totales
+        - total_proyecto (Decimal): Suma total de gastos en todos los POAs
+
+    Retorna:
+        - Instancia del modelo con resumen completo del proyecto y sus POAs
+    """
+    id_proyecto: UUID
+    codigo_proyecto: str
+    titulo: str
+    poas: List[PoaResumen]
+    total_proyecto: condecimal(max_digits=12, decimal_places=2)
+
+    class Config:
+        from_attributes = True
