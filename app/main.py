@@ -1287,7 +1287,7 @@ async def listar_detalles_con_precios(
         select(models.Rol).where(models.Rol.id_rol == usuario.id_rol)
     )
     rol = result_rol.scalars().first()
-    if not rol or rol.nombre_rol != "ADMINISTRADOR":
+    if not rol or rol.nombre_rol != "Administrador":
         raise HTTPException(
             status_code=403,
             detail="Solo los administradores pueden gestionar precios predefinidos"
@@ -1449,7 +1449,7 @@ async def actualizar_precio_detalle_tarea(
         select(models.Rol).where(models.Rol.id_rol == usuario.id_rol)
     )
     rol = result_rol.scalars().first()
-    if not rol or rol.nombre_rol != "ADMINISTRADOR":
+    if not rol or rol.nombre_rol != "Administrador":
         raise HTTPException(
             status_code=403,
             detail="Solo los administradores pueden actualizar precios predefinidos"
