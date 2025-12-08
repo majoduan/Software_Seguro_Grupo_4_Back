@@ -135,8 +135,8 @@ class Poa(Base):
     proyecto = relationship("Proyecto")
     periodo = relationship("Periodo")
     estado_poa = relationship("EstadoPOA")
-
     tipo_poa = relationship("TipoPOA")
+    actividades = relationship("Actividad", back_populates="poa")
 
 class ItemPresupuestario(Base):
     __tablename__ = "ITEM_PRESUPUESTARIO"
@@ -190,7 +190,7 @@ class Actividad(Base):
     total_por_actividad = Column(DECIMAL(18, 2), nullable=False)
     saldo_actividad = Column(DECIMAL(18, 2), nullable=False)
 
-    poa = relationship("Poa")
+    poa = relationship("Poa", back_populates="actividades")
     tareas = relationship("Tarea", back_populates="actividad")
 
 class Tarea(Base):

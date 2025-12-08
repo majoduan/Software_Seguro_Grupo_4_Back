@@ -2123,7 +2123,7 @@ async def obtener_resumen_poas(
         select(models.Poa)
         .options(selectinload(models.Poa.actividades))
         .where(models.Poa.id_proyecto == id_proyecto)
-        .order_by(models.Poa.anio_poa.asc())
+        .order_by(models.Poa.anio_ejecucion.asc())
     )
     poas = result.scalars().all()
 
@@ -2153,10 +2153,13 @@ async def obtener_resumen_poas(
         # Calcular saldo disponible del POA
         saldo_disponible = (poa.presupuesto_asignado or Decimal("0")) - total_poa
 
+        # Convertir anio_ejecucion (string) a int para el schema
+        anio_poa = int(poa.anio_ejecucion) if poa.anio_ejecucion else 0
+
         poas_resumen.append({
             "id_poa": poa.id_poa,
             "codigo_poa": poa.codigo_poa,
-            "anio_poa": poa.anio_poa,
+            "anio_poa": anio_poa,
             "presupuesto_asignado": poa.presupuesto_asignado or Decimal("0"),
             "total_gastado": total_poa,
             "saldo_disponible": saldo_disponible,
