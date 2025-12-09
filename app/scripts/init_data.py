@@ -542,14 +542,15 @@ async def seed_all_data():
                 "PIM": ["5.2"], "PVIF": ["5.2"], "PVIS": ["5.2"], "PIGR": ["5.2"], "PIS": ["5.2"], "PIIF": ["5.2"]
             }
         },
-        # Código 730204 - Publicaciones (solo PIM)
+        # Código 730204 - Publicaciones (PIM, PIS)
         {
             "codigo": "730204",
             "nombre": "Solicitud de autorización para el pago de publicaciones",
             "descripcion": "",
             "características": "6.1; 0; 0",
             "asociaciones": {
-                "PIM": ["6.1"]
+                "PIM": ["6.1"],
+                "PIS": ["6.1"]
             }
         },
         # Código 730204 - Impresión 3D (solo PTT)
@@ -569,7 +570,7 @@ async def seed_all_data():
             "descripcion": "",
             "características": "0; 0; 6.1",
             "asociaciones": {
-                "PVIF": ["6.1"], "PVIS": ["6.1"], "PIGR": ["6.1"], "PIS": ["6.1"], "PIIF": ["6.1"]
+                "PVIF": ["6.1"], "PVIS": ["6.1"], "PIGR": ["6.1"], "PIIF": ["6.1"]
             }
         },
         # Código 730612 - Eventos académicos
