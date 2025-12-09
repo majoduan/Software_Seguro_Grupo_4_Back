@@ -618,7 +618,7 @@ async def seed_all_data():
             "codigo": "730609",
             "nombre": "Análisis de laboratorios",
             "descripcion": "",
-            "características": "9.1; 0; 0",
+            "características": "9.1; 0; 9.1",
             "asociaciones": {
                 "PIM": ["9.1"],
                 "PIS": ["9.1"]
@@ -629,7 +629,7 @@ async def seed_all_data():
             "codigo": "840109",
             "nombre": "Adquisición de literatura especializada",
             "descripcion": "(valor mas de 100 y durabilidad)",
-            "características": "10.1; 0; 0",
+            "características": "10.1; 0; 10.1",
             "asociaciones": {
                 "PIM": ["10.1"],
                 "PIS": ["10.1"]
@@ -639,7 +639,7 @@ async def seed_all_data():
             "codigo": "731409",
             "nombre": "Adquisición de literatura especializada",
             "descripcion": "(valor mas de 100 y durabilidad)",
-            "características": "10.1; 0; 0",
+            "características": "10.1; 0; 10.1",
             "asociaciones": {
                 "PIM": ["10.1"],
                 "PIS": ["10.1"]
@@ -650,7 +650,7 @@ async def seed_all_data():
             "codigo": "730304",
             "nombre": "Viáticos al exterior",
             "descripcion": "",
-            "características": "11.1; 0; 0",
+            "características": "11.1; 0; 11.1",
             "asociaciones": {
                 "PIM": ["11.1"],
                 "PIS": ["11.1"]
@@ -661,7 +661,7 @@ async def seed_all_data():
             "codigo": "730302",
             "nombre": "Pasajes aéreos al exterior",
             "descripcion": "",
-            "características": "11.2; 0; 0",
+            "características": "11.2; 0; 11.2",
             "asociaciones": {
                 "PIM": ["11.2"],
                 "PIS": ["11.2"]
@@ -672,7 +672,7 @@ async def seed_all_data():
             "codigo": "730302",
             "nombre": "Movilización al exterior",
             "descripcion": "",
-            "características": "11.3; 0; 0",
+            "características": "11.3; 0; 11.3",
             "asociaciones": {
                 "PIM": ["11.3"],
                 "PIS": ["11.3"]
@@ -683,7 +683,7 @@ async def seed_all_data():
             "codigo": "730302",
             "nombre": "Pasajes aéreos para atención a delegados (investigadores colaboradores externos)",
             "descripcion": "",
-            "características": "12.1; 0; 0",
+            "características": "12.1; 0; 12.1",
             "asociaciones": {
                 "PIM": ["12.1"],
                 "PIS": ["12.1"]
@@ -694,7 +694,7 @@ async def seed_all_data():
             "codigo": "730307",
             "nombre": "Servicio de hospedaje y alimentación para atención a delegados (investigadores colaboradores externos)",
             "descripcion": "",
-            "características": "12.2; 0; 0",
+            "características": "12.2; 0; 12.2",
             "asociaciones": {
                 "PIM": ["12.2"],
                 "PIS": ["12.2"]
