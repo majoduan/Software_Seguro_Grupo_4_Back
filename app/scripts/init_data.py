@@ -612,24 +612,26 @@ async def seed_all_data():
                 "PIM": ["8.3"], "PTT": ["5.3"], "PVIF": ["8.3"], "PVIS": ["8.3"], "PIGR": ["8.3"], "PIS": ["8.3"], "PIIF": ["8.3"]
             }
         },
-        # Código 730609 - Análisis laboratorios (solo PIM)
+        # Código 730609 - Análisis laboratorios (PIM, PIS)
         {
             "codigo": "730609",
             "nombre": "Análisis de laboratorios",
             "descripcion": "",
             "características": "9.1; 0; 0",
             "asociaciones": {
-                "PIM": ["9.1"]
+                "PIM": ["9.1"],
+                "PIS": ["9.1"]
             }
         },
-        # Códigos 840109 y 731409 - Literatura especializada (alternativas, solo PIM)
+        # Códigos 840109 y 731409 - Literatura especializada (alternativas, PIM, PIS)
         {
             "codigo": "840109",
             "nombre": "Adquisición de literatura especializada",
             "descripcion": "(valor mas de 100 y durabilidad)",
             "características": "10.1; 0; 0",
             "asociaciones": {
-                "PIM": ["10.1"]
+                "PIM": ["10.1"],
+                "PIS": ["10.1"]
             }
         },
         {
@@ -638,57 +640,63 @@ async def seed_all_data():
             "descripcion": "(valor mas de 100 y durabilidad)",
             "características": "10.1; 0; 0",
             "asociaciones": {
-                "PIM": ["10.1"]
+                "PIM": ["10.1"],
+                "PIS": ["10.1"]
             }
         },
-        # Código 730304 - Viáticos exterior (solo PIM)
+        # Código 730304 - Viáticos exterior (PIM, PIS)
         {
             "codigo": "730304",
             "nombre": "Viáticos al exterior",
             "descripcion": "",
             "características": "11.1; 0; 0",
             "asociaciones": {
-                "PIM": ["11.1"]
+                "PIM": ["11.1"],
+                "PIS": ["11.1"]
             }
         },
-        # Código 730302 - Pasajes aéreos exterior (solo PIM)
+        # Código 730302 - Pasajes aéreos exterior (PIM, PIS)
         {
             "codigo": "730302",
             "nombre": "Pasajes aéreos al exterior",
             "descripcion": "",
             "características": "11.2; 0; 0",
             "asociaciones": {
-                "PIM": ["11.2"]
+                "PIM": ["11.2"],
+                "PIS": ["11.2"]
             }
         },
-        # Código 730302 - Movilización exterior (solo PIM)
+        # Código 730302 - Movilización exterior (PIM, PIS)
         {
             "codigo": "730302",
             "nombre": "Movilización al exterior",
             "descripcion": "",
             "características": "11.3; 0; 0",
             "asociaciones": {
-                "PIM": ["11.3"]
+                "PIM": ["11.3"],
+                "PIS": ["11.3"]
             }
         },
-        # Código 730302 - Pasajes delegados (solo PIM)
+        # Código 730302 - Pasajes delegados (PIM, PIS)
         {
             "codigo": "730302",
             "nombre": "Pasajes aéreos para atención a delegados (investigadores colaboradores externos)",
             "descripcion": "",
             "características": "12.1; 0; 0",
             "asociaciones": {
-                "PIM": ["12.1"]
+                "PIM": ["12.1"],
+                "PIS": ["12.1"]
             }
         },
-        # Código 730307 - Hospedaje delegados (solo PIM)
+        # Código 730307 - Hospedaje delegados (PIM, PIS)
         {
             "codigo": "730307",
             "nombre": "Servicio de hospedaje y alimentación para atención a delegados (investigadores colaboradores externos)",
             "descripcion": "",
             "características": "12.2; 0; 0",
             "asociaciones": {
-                "PIM": ["12.2"]
+                "PIM": ["12.2"],
+                "PIS": ["12.2"]
             }
         },
         # Código 730601 - Servicios técnicos (solo PTT)
