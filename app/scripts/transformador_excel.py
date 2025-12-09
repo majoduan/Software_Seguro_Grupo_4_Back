@@ -276,31 +276,40 @@ def validar_fila_encabezados(df, fila, col_inicio, col_excluir):
         if col == col_excluir:  # Saltar la columna que no se debe validar
             continue
 
-        valor = str(df.iloc[fila, col]).strip().upper()
+        valor_original = df.iloc[fila, col]
+        # Para fechas, usar el valor original (datetime). Para texto, convertir a string y upper
+        if isinstance(valor_original, (pd.Timestamp, datetime)):
+            valor = valor_original
+            valor_texto = str(valor_original).strip().upper()
+        else:
+            valor = str(valor_original).strip().upper()
+            valor_texto = valor
+
         encabezado_valido = False
         # Validar encabezados requeridos
         for encabezado in encabezados_requeridos.keys():
             if encabezado == "CANTIDAD":
-                if valor.startswith("CANTIDAD"):
+                if valor_texto.startswith("CANTIDAD"):
                     if encabezados_requeridos[encabezado]:
                         raise ValueError(f"Columna duplicada: '{encabezado}' encontrada más de una vez en la celda {chr(65 + col)}{fila + 1}.")
                     encabezados_requeridos[encabezado] = True
                     columnas_encontradas[encabezado] = col
                     encabezado_valido = True
                     break  # Ya no es necesario seguir iterando sobre encabezados
-                
+
             else:
-                if valor == encabezado:
+                if valor_texto == encabezado:
                     if encabezados_requeridos[encabezado]:
                         raise ValueError(f"Columna duplicada: '{encabezado}' encontrada más de una vez en la celda {chr(65 + col)}{fila + 1}.")
                     encabezados_requeridos[encabezado] = True
                     columnas_encontradas[encabezado] = col
                     encabezado_valido = True
                     break  # Ya no es necesario seguir iterando sobre encabezados
-        
+
         if not encabezado_valido:
-            if not es_fecha(valor):
+            if not es_fecha(valor_original):
                 raise ValueError(f"Valor no válido en la celda {chr(65 + col)}{fila + 1}.")
+            # Usar el valor original (datetime) como clave para evitar problemas con conversiones
             if valor in columnas_encontradas:
                 raise ValueError(
                     "Hay fechas repetidas en las columnas de fechas en las celdas: "
@@ -331,13 +340,19 @@ def validar_fila_encabezados(df, fila, col_inicio, col_excluir):
 def es_fecha(valor):
     """Verifica si un valor es una fecha válida en formatos esperados.
     Parámetros:
-        valor (str): Valor a verificar.
+        valor (str o datetime): Valor a verificar.
 
     Operación:
-        - Intenta convertir el valor usando varios formatos de fecha aceptados.
+        - Si es un objeto datetime de pandas o Python, retorna True directamente
+        - Si no, intenta convertir el valor usando varios formatos de fecha aceptados.
 
     Retorna:
         bool: True si el valor es una fecha válida, False en caso contrario."""
+    # Si ya es un objeto datetime de pandas o Python, es válido
+    if isinstance(valor, (pd.Timestamp, datetime)):
+        return True
+
+    # Si no, intentar convertir string a datetime
     formatos_validos = ["%Y-%m-%d", "%d/%m/%Y", "%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S"]  # Formatos aceptados
     for formato in formatos_validos:
         try:
