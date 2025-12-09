@@ -20,6 +20,7 @@ from app.business_validators import (
 )
 from passlib.context import CryptContext
 import uuid
+import json
 from typing import List
 from dateutil.relativedelta import relativedelta
 import re
@@ -1267,6 +1268,153 @@ async def obtener_detalles_tarea_poa(
         .where(models.Poa.id_poa == id_poa)
     )
     return result.scalars().all()
+
+
+@app.get("/poas/{id_poa}/actividades/{codigo_actividad}/detalles-tarea-disponibles", response_model=List[schemas.DetalleTareaOut])
+async def obtener_detalles_tarea_para_actividad(
+    id_poa: uuid.UUID,
+    codigo_actividad: str,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    """
+    Retorna los detalles de tarea disponibles para una actividad específica según el tipo de POA.
+
+    Objetivo:
+        Centralizar en el backend la lógica de filtrado de tareas por actividad,
+        eliminando la necesidad de parsing y mapeo manual en el frontend.
+
+    Parámetros:
+        - id_poa: UUID del POA
+        - codigo_actividad: Código de actividad (ej: "ACT-PIM-9", "ACT-PTT-3")
+        - db: Sesión de base de datos
+        - usuario: Usuario autenticado
+
+    Operación:
+        1. Obtener POA y su tipo
+        2. Obtener todos los DetallesTarea asociados al tipo de POA
+        3. Extraer número de actividad del código (ej: "ACT-PIM-9" -> "9")
+        4. Filtrar tareas usando el campo características (formato JSON)
+        5. Retornar solo las tareas aplicables a esa actividad
+
+    Retorna:
+        Lista de DetalleTarea filtrados por actividad
+    """
+
+    # 1. Obtener POA
+    poa = await db.get(models.Poa, id_poa)
+    if not poa:
+        raise HTTPException(status_code=404, detail="POA no encontrado")
+
+    # 2. Obtener tipo de POA
+    tipo_poa_result = await db.execute(
+        select(models.TipoPOA).where(models.TipoPOA.id_tipo_poa == poa.id_tipo_poa)
+    )
+    tipo_poa = tipo_poa_result.scalar_one_or_none()
+    if not tipo_poa:
+        raise HTTPException(status_code=404, detail="Tipo de POA no encontrado")
+
+    # 3. Extraer número de actividad del código
+    numero_actividad = _extraer_numero_actividad(codigo_actividad)
+
+    # 4. Obtener DetallesTarea asociados al tipo de POA
+    result = await db.execute(
+        select(models.DetalleTarea)
+        .join(models.TipoPoaDetalleTarea)
+        .where(models.TipoPoaDetalleTarea.id_tipo_poa == tipo_poa.id_tipo_poa)
+    )
+    detalles = result.scalars().all()
+
+    # 5. Filtrar por actividad usando características JSON
+    detalles_filtrados = _filtrar_por_actividad(detalles, numero_actividad, tipo_poa.codigo_tipo)
+
+    return detalles_filtrados
+
+
+def _extraer_numero_actividad(codigo_actividad: str) -> str:
+    """
+    Extrae el número de actividad del código.
+
+    Ejemplos:
+        "ACT-PIM-9" -> "9"
+        "ACT-PTT-3" -> "3"
+        "ACT-1" -> "1"
+
+    Parámetros:
+        codigo_actividad: Código completo de la actividad
+
+    Retorna:
+        String con el número de actividad
+    """
+    partes = codigo_actividad.split('-')
+    return partes[-1]
+
+
+def _filtrar_por_actividad(
+    detalles: List[models.DetalleTarea],
+    numero_actividad: str,
+    tipo_poa: str
+) -> List[models.DetalleTarea]:
+    """
+    Filtra detalles de tarea según el número de actividad y tipo de POA.
+
+    Usa el campo características (formato JSON): {"PIM": "9.1", "PTT": null, "OTROS": "9.1"}
+
+    Parámetros:
+        detalles: Lista de DetalleTarea a filtrar
+        numero_actividad: Número de actividad (ej: "9")
+        tipo_poa: Código del tipo de POA (ej: "PIM", "PTT", "PIS")
+
+    Operación:
+        1. Determinar clave JSON según tipo POA:
+           - "PIM" -> usa clave "PIM"
+           - "PTT" -> usa clave "PTT"
+           - Otros (PVIF, PVIS, PIGR, PIS, PIIF) -> usa clave "OTROS"
+        2. Para cada detalle, parsear JSON de características
+        3. Obtener valor de la clave correspondiente
+        4. Si el valor es null o "0", excluir tarea
+        5. Si el valor empieza con "{numero_actividad}.", incluir tarea
+
+    Retorna:
+        Lista filtrada de DetalleTarea
+    """
+
+    # Determinar clave JSON según tipo POA
+    if tipo_poa == 'PIM':
+        clave_json = 'PIM'
+    elif tipo_poa == 'PTT':
+        clave_json = 'PTT'
+    else:  # PVIF, PVIS, PIGR, PIS, PIIF
+        clave_json = 'OTROS'
+
+    resultado = []
+
+    for detalle in detalles:
+        if not detalle.caracteristicas:
+            continue
+
+        try:
+            # Parsear JSON
+            carac_dict = json.loads(detalle.caracteristicas)
+
+            # Obtener valor de la clave correspondiente
+            numero_tarea = carac_dict.get(clave_json)
+
+            # Excluir si es None (null en JSON)
+            if numero_tarea is None:
+                continue
+
+            # Verificar si la tarea pertenece a la actividad
+            # Ej: numero_actividad="9", numero_tarea="9.1" -> True
+            #     numero_actividad="9", numero_tarea="10.1" -> False
+            if numero_tarea.startswith(f"{numero_actividad}."):
+                resultado.append(detalle)
+
+        except (json.JSONDecodeError, AttributeError, KeyError):
+            # Si hay error parseando JSON, excluir este detalle
+            continue
+
+    return resultado
 
 
 # ==================== GESTIÓN DE PRECIOS PREDEFINIDOS ====================

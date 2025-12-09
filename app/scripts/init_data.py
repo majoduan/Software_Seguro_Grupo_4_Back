@@ -1,7 +1,8 @@
-"""Se encarga de llenar la base de datos con datos iniciales necesarios 
-para el funcionamiento del sistema.     
+"""Se encarga de llenar la base de datos con datos iniciales necesarios
+para el funcionamiento del sistema.
 """
 import uuid
+import json
 from app.database import SessionLocal
 from app.models import (
     Rol,
@@ -20,6 +21,43 @@ from app.models import (
 
 from sqlalchemy.future import select
 from sqlalchemy import and_
+
+
+def convertir_caracteristicas_a_json(caracteristicas_antiguo: str) -> str:
+    """
+    Convierte características del formato posicional antiguo al nuevo formato JSON.
+
+    Formato antiguo: "X.X; Y.Y; Z.Z" donde posiciones son:
+    - Índice 0: PIM
+    - Índice 1: PTT
+    - Índice 2: PVIF/PVIS/PIGR/PIS/PIIF (OTROS)
+
+    Formato nuevo: JSON {"PIM": "X.X", "PTT": "Y.Y", "OTROS": "Z.Z"}
+    El valor "0" se convierte en null.
+
+    Parámetros:
+        caracteristicas_antiguo: String en formato "X.X; Y.Y; Z.Z"
+
+    Retorna:
+        String JSON con formato {"PIM": ..., "PTT": ..., "OTROS": ...}
+    """
+    partes = caracteristicas_antiguo.split('; ')
+
+    if len(partes) != 3:
+        # Formato inesperado, retornar sin cambios
+        return caracteristicas_antiguo
+
+    # Convertir "0" a None (null en JSON)
+    pim_val = None if partes[0] == '0' else partes[0]
+    ptt_val = None if partes[1] == '0' else partes[1]
+    otros_val = None if partes[2] == '0' else partes[2]
+
+    return json.dumps({
+        "PIM": pim_val,
+        "PTT": ptt_val,
+        "OTROS": otros_val
+    })
+
 
 # Esta función sirve para llenar la base de datos con datos iniciales
 async def seed_all_data():
@@ -754,12 +792,15 @@ async def seed_all_data():
         detalle_existente = result.scalars().first()
 
         if not detalle_existente:
+            # Convertir características al nuevo formato JSON
+            caracteristicas_json = convertir_caracteristicas_a_json(características)
+
             nuevo_detalle = DetalleTarea(
                 id_detalle_tarea=uuid.uuid4(),
                 id_item_presupuestario=item_presupuestario.id_item_presupuestario,
                 nombre=nombre,
                 descripcion=descripcion,
-                caracteristicas=características,
+                caracteristicas=caracteristicas_json,
                 precio_unitario=precio_unitario
             )
             db.add(nuevo_detalle)
