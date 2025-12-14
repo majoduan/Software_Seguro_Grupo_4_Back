@@ -2755,165 +2755,21 @@ async def descargar_excel(
     reporte: list = Body(...)
 ):
     """
-    Genera archivo Excel con formato compatible para re-importación.
+    Genera archivo Excel con formato institucional y compatible para re-importación.
 
-    Estructura del Excel generado (compatible con transformador_excel.py):
+    Características:
+    - Nombre de hoja: "POA {año}" (ej: "POA 2025")
     - Actividades agrupadas con formato (1), (2), (3)...
-    - Encabezados en MAYÚSCULAS exactas
-    - Columnas de fechas en formato parseable (YYYY-MM-DD)
-    - Columna SUMAN con totales
-    - Columna TOTAL POR ACTIVIDAD
-    - Fila TOTAL PRESUPUESTO al final
+    - Cantidades sin decimales (formato entero)
+    - Columnas de meses individuales OCULTAS
+    - Fórmulas automáticas: =SUMA(), =CANTIDAD*PRECIO
+    - Colores institucionales (azul actividades, amarillo totales)
+    - 100% compatible con transformador_excel.py
     """
-    output = io.BytesIO()
-    workbook = xlsxwriter.Workbook(output, {'in_memory': True})
-    worksheet = workbook.add_worksheet("Reporte POA")
+    from app.export_excel_poa import generar_excel_poa
 
-    # Formatos
-    header = workbook.add_format({'bold': True, 'bg_color': '#D9D9D9', 'border': 1, 'align': 'center', 'valign': 'vcenter', 'text_wrap': True})
-    centro = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'text_wrap': True})
-    moneda = workbook.add_format({'num_format': '"$"#,##0.00', 'border': 1, 'align': 'center', 'valign': 'vcenter', 'text_wrap': True})
-    texto = workbook.add_format({'border': 1, 'align': 'left', 'valign': 'vcenter', 'text_wrap': True})
-    negrita = workbook.add_format({'bold': True, 'border': 1, 'align': 'left', 'valign': 'vcenter', 'text_wrap': True})
+    output = generar_excel_poa(reporte)
 
-    # Organizar tareas por actividad
-    # Agrupar por descripción de actividad (asumiendo que viene en el nombre de la tarea antes del primer espacio)
-    from collections import defaultdict
-    actividades_dict = defaultdict(list)
-
-    # Obtener año del POA de la primera tarea (todas deberían ser del mismo año)
-    anio_poa = reporte[0]["anio_poa"] if reporte else ""
-
-    # Agrupar tareas por su actividad
-    # El nombre de la tarea debe tener formato: "9.1 Descripción" donde 9 es el número de actividad
-    for tarea in reporte:
-        nombre_tarea = tarea["nombre"]
-        # Extraer número de actividad del código (ej: "9.1" -> actividad 9)
-        partes = nombre_tarea.split(".")
-        if len(partes) >= 1 and partes[0].strip().isdigit():
-            num_actividad = int(partes[0].strip())
-            actividades_dict[num_actividad].append(tarea)
-
-    # Ordenar actividades por número
-    actividades_ordenadas = sorted(actividades_dict.items())
-
-    # Meses en orden
-    meses_orden = [
-        "enero", "febrero", "marzo", "abril", "mayo", "junio",
-        "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
-    ]
-
-    # Generar fechas del año correspondiente (formato parseable: YYYY-MM-DD)
-    fechas_headers = []
-    for i, mes in enumerate(meses_orden, start=1):
-        # Usar primer día de cada mes del año del POA
-        fecha_str = f"{anio_poa}-{i:02d}-01"
-        fechas_headers.append(fecha_str)
-
-    # Encabezados en MAYÚSCULAS exactas (compatible con validación de importación)
-    fila_actual = 0
-
-    # PRIMERA FILA: Actividad (1) con TOTAL POR ACTIVIDAD
-    # SEGUNDA FILA: Encabezados de columnas
-    # Esta estructura se repite para cada actividad
-
-    # Variables para calcular totales globales
-    total_presupuesto_global = 0
-    programacion_global = {mes: 0 for mes in meses_orden}
-    suman_global = 0
-    col_total_por_actividad = 1 + 4 + len(fechas_headers) + 1  # Calcular posición de columna TOTAL POR ACTIVIDAD
-
-    for num_actividad, tareas_actividad in actividades_ordenadas:
-        # Calcular total de la actividad
-        total_actividad = sum(tarea["total"] for tarea in tareas_actividad)
-        total_presupuesto_global += total_actividad
-
-        # Calcular programación mensual de la actividad
-        programacion_actividad = {mes: 0 for mes in meses_orden}
-        for tarea in tareas_actividad:
-            prog = tarea.get("programacion_mensual", {})
-            for mes in meses_orden:
-                programacion_actividad[mes] += prog.get(mes, 0)
-
-        # FILA DE ACTIVIDAD: (1) Nombre de actividad con TOTAL POR ACTIVIDAD
-        descripcion_actividad = f"({num_actividad}) Actividad {num_actividad}"
-
-        # Escribir fila de actividad
-        worksheet.write(fila_actual, 0, descripcion_actividad, negrita)
-        # Escribir total en columna TOTAL POR ACTIVIDAD
-        worksheet.write(fila_actual, col_total_por_actividad, total_actividad, moneda)
-        fila_actual += 1
-
-        # FILA DE ENCABEZADOS (solo para la primera actividad)
-        if num_actividad == 1:
-            cabecera = [
-                "",  # Columna vacía antes de DESCRIPCIÓN O DETALLE
-                "DESCRIPCIÓN O DETALLE",
-                "ITEM PRESUPUESTARIO",
-                "CANTIDAD",
-                "PRECIO UNITARIO",
-                "TOTAL"
-            ] + fechas_headers + ["SUMAN", "TOTAL POR ACTIVIDAD"]
-
-            worksheet.write_row(fila_actual, 0, cabecera, header)
-
-            # Ajustar anchos de columna
-            worksheet.set_column(0, 0, 45)   # Columna de nombres de tarea/actividad
-            worksheet.set_column(1, 1, 45)   # DESCRIPCIÓN O DETALLE
-            worksheet.set_column(2, 2, 16)   # ITEM PRESUPUESTARIO
-            worksheet.set_column(3, 3, 8)    # CANTIDAD
-            worksheet.set_column(4, 4, 12)   # PRECIO UNITARIO
-            worksheet.set_column(5, 5, 12)   # TOTAL
-            worksheet.set_column(6, 6 + len(fechas_headers) - 1, 11)  # Fechas
-            worksheet.set_column(6 + len(fechas_headers), 6 + len(fechas_headers), 12)  # SUMAN
-            worksheet.set_column(col_total_por_actividad, col_total_por_actividad, 18)  # TOTAL POR ACTIVIDAD
-
-            fila_actual += 1
-
-        # FILAS DE TAREAS
-        for tarea in tareas_actividad:
-            prog = tarea.get("programacion_mensual", {})
-            suman_tarea = sum(prog.get(mes, 0) for mes in meses_orden)
-            suman_global += suman_tarea
-
-            # Columna 0: Nombre de tarea
-            worksheet.write(fila_actual, 0, tarea["nombre"], texto)
-            # Columna 1: DESCRIPCIÓN O DETALLE
-            worksheet.write(fila_actual, 1, tarea["detalle_descripcion"], texto)
-            # Columna 2: ITEM PRESUPUESTARIO
-            worksheet.write(fila_actual, 2, tarea["item_presupuestario"], centro)
-            # Columna 3: CANTIDAD
-            worksheet.write_number(fila_actual, 3, tarea["cantidad"], centro)
-            # Columna 4: PRECIO UNITARIO
-            worksheet.write_number(fila_actual, 4, tarea["precio_unitario"], moneda)
-            # Columna 5: TOTAL
-            worksheet.write_number(fila_actual, 5, tarea["total"], moneda)
-
-            # Columnas 6-17: 12 meses con fechas parseables
-            for col_idx, (fecha_str, mes) in enumerate(zip(fechas_headers, meses_orden), start=6):
-                valor_mes = prog.get(mes, 0)
-                worksheet.write_number(fila_actual, col_idx, valor_mes, moneda)
-                programacion_global[mes] += valor_mes
-
-            # Columna 18: SUMAN
-            worksheet.write_number(fila_actual, 6 + len(fechas_headers), suman_tarea, moneda)
-
-            fila_actual += 1
-
-    # FILA FINAL: TOTAL PRESUPUESTO
-    worksheet.write(fila_actual, 0, "TOTAL PRESUPUESTO", negrita)
-    # Columna TOTAL (posición 5)
-    # Aquí NO va el total, va en TOTAL POR ACTIVIDAD
-    # Programación mensual
-    for col_idx, mes in enumerate(meses_orden, start=6):
-        worksheet.write_number(fila_actual, col_idx, programacion_global[mes], moneda)
-    # SUMAN
-    worksheet.write_number(fila_actual, 6 + len(fechas_headers), suman_global, moneda)
-    # TOTAL POR ACTIVIDAD
-    worksheet.write_number(fila_actual, col_total_por_actividad, total_presupuesto_global, moneda)
-
-    workbook.close()
-    output.seek(0)
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
