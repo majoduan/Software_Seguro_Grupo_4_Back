@@ -2710,7 +2710,6 @@ async def reporte_poa(
         poa = next((p for p in poas if actividad and p.id_poa == actividad.id_poa), None)
         proyecto = next((pr for pr in proyectos if poa and pr.id_proyecto == poa.id_proyecto), None)
         tipo_proyecto_codigo = next((tp.codigo_tipo for tp in tipos_proyecto if proyecto and tp.id_tipo_proyecto == proyecto.id_tipo_proyecto), "") if proyecto else ""
-        presupuesto_aprobado = proyecto.presupuesto_aprobado if proyecto else 0
 
         # Item presupuestario
         result = await db.execute(
@@ -2737,9 +2736,8 @@ async def reporte_poa(
             "anio_poa": poa.anio_ejecucion if poa else "",
             "codigo_proyecto": proyecto.codigo_proyecto if proyecto else "",
             "tipo_proyecto": tipo_proyecto_codigo,
-            "presupuesto_aprobado": float(presupuesto_aprobado) if presupuesto_aprobado else 0,
             "nombre": tarea.nombre,
-            "detalle_descripcion": tarea.detalle_descripcion,  # NUEVO CAMPO
+            "detalle_descripcion": tarea.detalle_descripcion,
             "item_presupuestario": item_presupuestario,
             "cantidad": tarea.cantidad,
             "precio_unitario": float(tarea.precio_unitario),
