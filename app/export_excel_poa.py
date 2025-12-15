@@ -5,9 +5,17 @@ Módulo para exportar POAs a Excel con formato institucional EXACTO de la planti
 Características:
 - Nombre de hoja: "POA {año}" (ej: "POA 2025")
 - Encabezado institucional con título, dirección y código de proyecto
-- Cantidades sin decimales (formato entero)
-- Columnas de meses individuales VISIBLES (no ocultas)
-- Fórmulas automáticas de suma (=SUMA(), =CANTIDAD*PRECIO)
+- Estructura de columnas:
+  * A: Nombre de actividad/tarea
+  * B: DESCRIPCIÓN O DETALLE
+  * C: ITEM PRESUPUESTARIO
+  * D: CANTIDAD (sin decimales)
+  * E: PRECIO UNITARIO
+  * F: TOTAL (fórmula =D*E)
+  * G: TOTAL POR ACTIVIDAD (fórmula suma de F por actividad)
+  * H-S: 12 meses (formato "ene-26", "feb-26"...)
+  * T: SUMAN (fórmula suma de meses)
+- Fórmulas automáticas de suma (=SUM(), =CANTIDAD*PRECIO)
 - Colores institucionales EXACTOS de la plantilla
 - 100% compatible con transformador_excel.py para re-importación
 - Maneja POAs vacíos (genera solo encabezados)
@@ -139,6 +147,17 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
         'font_size': 9
     })
 
+    # Formato de fecha para encabezados de meses (mmm-yy)
+    fecha_header_format = workbook.add_format({
+        'num_format': 'mmm-yy',  # Formato: ene-26, feb-26
+        'bold': True,
+        'bg_color': '#D9D9D9',
+        'border': 1,
+        'align': 'center',
+        'valign': 'vcenter',
+        'font_size': 9
+    })
+
     # ========== AGRUPAR TAREAS POR ACTIVIDAD ==========
 
     actividades_dict = defaultdict(list)
@@ -168,33 +187,48 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
         "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
     ]
 
-    # Generar fechas parseables (YYYY-MM-DD)
-    fechas_headers = []
-    for i, mes in enumerate(meses_orden, start=1):
-        fecha_str = f"{anio_poa}-{i:02d}-01"
-        fechas_headers.append(fecha_str)
+    # Generar fechas en formato "ene-26", "feb-26", etc. (texto visible)
+    # Y también generar objetos datetime para las fórmulas de Excel
+    meses_abreviados = {
+        "enero": "ene", "febrero": "feb", "marzo": "mar", "abril": "abr",
+        "mayo": "may", "junio": "jun", "julio": "jul", "agosto": "ago",
+        "septiembre": "sept", "octubre": "oct", "noviembre": "nov", "diciembre": "dic"
+    }
 
-    # Definir posición de columnas
-    COL_NOMBRE_TAREA = 0
-    COL_DESCRIPCION = 1
-    COL_ITEM_PRESU = 2
-    COL_CANTIDAD = 3
-    COL_PRECIO_UNIT = 4
-    COL_TOTAL = 5
-    COL_MESES_INICIO = 6  # Columnas 6-17 (12 meses)
-    COL_SUMAN = 18
-    COL_TOTAL_POR_ACTIVIDAD = 19
+    fechas_headers = []  # Formato texto: "ene-26", "feb-26"
+    fechas_excel = []    # Objetos datetime para Excel
+    anio_siguiente = int(anio_poa) + 1
+    anio_corto = str(anio_siguiente)[-2:]  # Últimos 2 dígitos (ej: 2026 -> 26)
+
+    from datetime import datetime
+    for i, mes in enumerate(meses_orden, start=1):
+        mes_abr = meses_abreviados[mes]
+        fecha_texto = f"{mes_abr}-{anio_corto}"  # Formato visible: "ene-26"
+        fecha_obj = datetime(anio_siguiente, i, 1)  # Objeto datetime para Excel
+        fechas_headers.append(fecha_texto)
+        fechas_excel.append(fecha_obj)
+
+    # Definir posición de columnas (según plantilla institucional)
+    COL_NOMBRE_TAREA = 0          # A
+    COL_DESCRIPCION = 1           # B (DESCRIPCIÓN O DETALLE)
+    COL_ITEM_PRESU = 2            # C (ITEM PRESUPUESTARIO)
+    COL_CANTIDAD = 3              # D (CANTIDAD)
+    COL_PRECIO_UNIT = 4           # E (PRECIO UNITARIO)
+    COL_TOTAL = 5                 # F (TOTAL)
+    COL_TOTAL_POR_ACTIVIDAD = 6   # G (TOTAL POR ACTIVIDAD) ✅ CORREGIDO
+    COL_MESES_INICIO = 7          # H-S (12 meses: columnas 7-18)
+    COL_SUMAN = 19                # T (SUMAN)
 
     # Ajustar anchos de columna (según plantilla)
-    worksheet.set_column(COL_NOMBRE_TAREA, COL_NOMBRE_TAREA, 45)
-    worksheet.set_column(COL_DESCRIPCION, COL_DESCRIPCION, 45)
-    worksheet.set_column(COL_ITEM_PRESU, COL_ITEM_PRESU, 16)
-    worksheet.set_column(COL_CANTIDAD, COL_CANTIDAD, 11)
-    worksheet.set_column(COL_PRECIO_UNIT, COL_PRECIO_UNIT, 12)
-    worksheet.set_column(COL_TOTAL, COL_TOTAL, 12)
-    worksheet.set_column(COL_MESES_INICIO, COL_MESES_INICIO + 11, 11)  # 12 meses VISIBLES
-    worksheet.set_column(COL_SUMAN, COL_SUMAN, 12)
-    worksheet.set_column(COL_TOTAL_POR_ACTIVIDAD, COL_TOTAL_POR_ACTIVIDAD, 18)
+    worksheet.set_column(COL_NOMBRE_TAREA, COL_NOMBRE_TAREA, 45)           # A
+    worksheet.set_column(COL_DESCRIPCION, COL_DESCRIPCION, 45)             # B
+    worksheet.set_column(COL_ITEM_PRESU, COL_ITEM_PRESU, 16)               # C
+    worksheet.set_column(COL_CANTIDAD, COL_CANTIDAD, 11)                   # D
+    worksheet.set_column(COL_PRECIO_UNIT, COL_PRECIO_UNIT, 12)             # E
+    worksheet.set_column(COL_TOTAL, COL_TOTAL, 12)                         # F
+    worksheet.set_column(COL_TOTAL_POR_ACTIVIDAD, COL_TOTAL_POR_ACTIVIDAD, 18)  # G
+    worksheet.set_column(COL_MESES_INICIO, COL_MESES_INICIO + 11, 11)      # H-S (12 meses)
+    worksheet.set_column(COL_SUMAN, COL_SUMAN, 12)                         # T
 
     # ========== ESCRIBIR ENCABEZADO INSTITUCIONAL ==========
 
@@ -285,15 +319,19 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
         "TOTAL"
     ]
 
-    # Escribir encabezados principales
+    # Escribir encabezados principales (A-F)
     for col_idx, header_text in enumerate(cabecera_datos):
         worksheet.write(fila_actual, col_idx, header_text, header_format)
 
-    # Escribir encabezados de meses (fechas)
-    for col_idx, fecha in enumerate(fechas_headers, start=COL_MESES_INICIO):
-        worksheet.write(fila_actual, col_idx, fecha, header_format)
+    # Columna G: TOTAL POR ACTIVIDAD (encabezado ya escrito en fila 7, aquí va vacío)
+    # No se escribe nada aquí
 
-    # Escribir SUMAN
+    # Escribir encabezados de meses (H-S) usando objetos datetime con formato mmm-yy
+    for i, fecha_obj in enumerate(fechas_excel):
+        col_idx = COL_MESES_INICIO + i
+        worksheet.write_datetime(fila_actual, col_idx, fecha_obj, fecha_header_format)
+
+    # Columna T: SUMAN
     worksheet.write(fila_actual, COL_SUMAN, 'SUMAN', header_format)
 
     fila_actual += 1
@@ -342,12 +380,15 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
             formula_total = f"={celda_cantidad}*{celda_precio}"
             worksheet.write_formula(fila_actual, COL_TOTAL, formula_total, moneda_format)
 
-            # Columnas 6-17: 12 meses (OCULTAS pero con datos)
+            # Columna 6 (G): TOTAL POR ACTIVIDAD - Vacía para tareas (solo en fila de actividad)
+            # No se escribe nada aquí
+
+            # Columnas 7-18 (H-S): 12 meses VISIBLES
             for col_idx, mes in enumerate(meses_orden, start=COL_MESES_INICIO):
                 valor_mes = prog.get(mes, 0)
                 worksheet.write_number(fila_actual, col_idx, valor_mes, moneda_format)
 
-            # Columna 18: SUMAN (FÓRMULA: =SUMA(meses))
+            # Columna 19 (T): SUMAN (FÓRMULA: =SUMA(meses))
             celda_inicio_meses = xl_rowcol_to_cell(fila_actual, COL_MESES_INICIO)
             celda_fin_meses = xl_rowcol_to_cell(fila_actual, COL_MESES_INICIO + 11)
             formula_suman = f"=SUM({celda_inicio_meses}:{celda_fin_meses})"
