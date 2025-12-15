@@ -371,6 +371,7 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
             fila_actividad_actual = fila_encabezados
             filas_actividades.append(fila_encabezados)
             primera_actividad_procesada = True
+            # La primera actividad ya tiene los encabezados en la fila 8, no se repiten
         else:
             # Las demás actividades se escriben normalmente en su propia fila
             descripcion_real = descripciones_actividades.get(num_actividad, f"Actividad {num_actividad}")
@@ -378,6 +379,22 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
             worksheet.write(fila_actual, COL_NOMBRE_TAREA, descripcion_actividad, actividad_format)
             fila_actividad_actual = fila_actual
             filas_actividades.append(fila_actual)
+            fila_actual += 1
+
+            # IMPORTANTE: Agregar fila de encabezados repetidos para esta actividad
+            # Columnas B-F: encabezados de datos
+            for i, header_text in enumerate(cabecera_datos):
+                col_idx = i + 1  # Empieza en columna B (índice 1)
+                worksheet.write(fila_actual, col_idx, header_text, header_format)
+
+            # Columna G: vacía (se usa para TOTAL POR ACTIVIDAD en la fila de la actividad)
+            # Columnas H-S: encabezados de meses
+            for i, fecha_obj in enumerate(fechas_excel):
+                col_idx = COL_MESES_INICIO + i
+                worksheet.write_datetime(fila_actual, col_idx, fecha_obj, fecha_header_format)
+
+            # Columna T: SUMAN
+            worksheet.write(fila_actual, COL_SUMAN, 'SUMAN', header_format)
             fila_actual += 1
 
         # FILAS DE TAREAS
