@@ -193,15 +193,23 @@ def transformar_excel(file_bytes: bytes, hoja: str):
 
 def detectar_inicio(df):
     """
-    Detecta la fila y columna donde comienza el encabezado basado en que empieze con '(1)'.
+    Detecta la fila donde comienzan los datos buscando 'DESCRIPCIÓN O DETALLE'
+    y validando que '(1)' esté en la columna A de esa fila.
     Retorna la fila del encabezado y la columna donde comienza.
     """
-    
+
+    # Buscar primero la fila que contiene "DESCRIPCIÓN O DETALLE"
     for i in range(len(df)):
         for j in range(len(df.columns)):
-            if isinstance(df.iloc[i, j], str) and df.iloc[i, j].startswith("(1)"):
-                return i, j
-    raise ValueError("No se encontró el encabezado esperado con la primera actividad '(1) nombre de la actividad'.")
+            valor = str(df.iloc[i, j]).strip().upper()
+            if "DESCRIPCIÓN O DETALLE" in valor:
+                # Verificar que en la columna A (índice 0) de esta fila esté "(1)"
+                valor_col_a = str(df.iloc[i, 0]).strip()
+                if valor_col_a.startswith("(1)"):
+                    # "(1)" está en la misma fila que los encabezados (formato correcto)
+                    return i, 0
+
+    raise ValueError("No se encontró el encabezado esperado 'DESCRIPCIÓN O DETALLE' con la primera actividad '(1)' en la misma fila.")
 
 def detectar_total_por_actividad(df, fila):
     """

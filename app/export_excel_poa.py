@@ -315,18 +315,21 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
 
     # ========== ESCRIBIR ENCABEZADOS DE COLUMNAS ==========
 
-    # Encabezado completo de columnas de datos (A-F)
+    # Guardar la fila de encabezados para escribir la primera actividad aquí
+    fila_encabezados = fila_actual
+
+    # Encabezado de columnas de datos (solo columnas B-F)
     cabecera_datos = [
-        "",                              # A (vacío, se llenará con actividades)
-        "DESCRIPCIÓN O DETALLE",         # B
-        "ITEM\nPRESUPUESTARIO",          # C
+        "DESCRIPCIÓN O DETALLE",       # B
+        "ITEM\nPRESUPUESTARIO",        # C
         "CANTIDAD\n(Meses de contrato)", # D
-        "PRECIO\nUNITARIO",              # E
-        "TOTAL"                          # F
+        "PRECIO\nUNITARIO",            # E
+        "TOTAL"                         # F
     ]
 
-    # Escribir encabezados principales (A-F)
-    for col_idx, header_text in enumerate(cabecera_datos):
+    # Escribir encabezados principales (B-F) - La columna A se llenará con la primera actividad
+    for i, header_text in enumerate(cabecera_datos):
+        col_idx = i + 1  # Empieza en columna B (índice 1)
         worksheet.write(fila_actual, col_idx, header_text, header_format)
 
     # Columna G: TOTAL POR ACTIVIDAD (encabezado ya escrito en fila 7, aquí va vacío)
@@ -340,12 +343,12 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
     # Columna T: SUMAN
     worksheet.write(fila_actual, COL_SUMAN, 'SUMAN', header_format)
 
-    # Avanzar a la siguiente fila para comenzar con las actividades
-    fila_actual += 1
+    # NO incrementar fila_actual todavía - la primera actividad se escribirá en esta misma fila
 
     # ========== ESCRIBIR ACTIVIDADES Y TAREAS ==========
 
     primera_fila_datos = fila_actual  # Guardar para fórmulas de totales
+    es_primera_actividad = True
 
     for num_actividad, tareas_actividad in actividades_ordenadas:
         # Guardar fila de inicio de actividad para fórmulas
@@ -355,15 +358,13 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
         descripcion_real = descripciones_actividades.get(num_actividad, f"Actividad {num_actividad}")
         descripcion_actividad = f"({num_actividad}) {descripcion_real}"
 
-        # Columna A: Nombre de actividad
-        worksheet.write(fila_actual, COL_NOMBRE_TAREA, descripcion_actividad, actividad_format)
-
-        # Columnas B-F: Repetir encabezados al lado de cada actividad
-        worksheet.write(fila_actual, COL_DESCRIPCION, "DESCRIPCIÓN O DETALLE", actividad_format)
-        worksheet.write(fila_actual, COL_ITEM_PRESU, "ITEM\nPRESUPUESTARIO", actividad_format)
-        worksheet.write(fila_actual, COL_CANTIDAD, "CANTIDAD\n(Meses de contrato)", actividad_format)
-        worksheet.write(fila_actual, COL_PRECIO_UNIT, "PRECIO\nUNITARIO", actividad_format)
-        worksheet.write(fila_actual, COL_TOTAL, "TOTAL", actividad_format)
+        if es_primera_actividad:
+            # La primera actividad se escribe en la fila de encabezados (fila 8)
+            worksheet.write(fila_actual, COL_NOMBRE_TAREA, descripcion_actividad, actividad_format)
+            es_primera_actividad = False
+        else:
+            # Las demás actividades se escriben normalmente
+            worksheet.write(fila_actual, COL_NOMBRE_TAREA, descripcion_actividad, actividad_format)
 
         # FÓRMULA: TOTAL POR ACTIVIDAD (suma de totales de tareas)
         # Se calculará después de escribir las tareas
