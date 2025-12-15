@@ -81,13 +81,14 @@ def transformar_excel(file_bytes: bytes, hoja: str):
         texto_col3 = str(fila[col_inicio]) if not pd.isna(fila[col_inicio]) else ""
 
         # Detectar línea de TOTAL PRESUPUESTO
-        if "TOTAL PRESUPUESTO" in texto_col3.upper():
+        if "TOTAL PRESUPUESTO" in texto_col3.strip().upper():
             total_poa_val = fila[col_total_por_actividad]
             if pd.notna(total_poa_val) and float(total_poa_val) != 0:
                 ejec = {}
                 for idx, col_idx in enumerate(fecha_indices):
                     val = fila[col_idx]
-                    if pd.notna(val) and str(val).strip() != "" and str(val) not in ["0", "0.0", "0.00"]:
+                    val_str = str(val).strip() if pd.notna(val) else ""
+                    if val_str and val_str not in ["0", "0.0", "0.00"]:
                         fecha = fecha_headers[idx]
                         ejec[str(fecha)] = float(val)
                 ejec["suman"] = float(fila[col_suman]) if pd.notna(fila[col_suman]) else 0.0
@@ -111,7 +112,7 @@ def transformar_excel(file_bytes: bytes, hoja: str):
             actividad_total = fila[col_total_por_actividad]
             try:
                 actividad_total = float(actividad_total)
-            except:
+            except (ValueError, TypeError):
                 raise ValueError(f"Error en la fila {i+1}: valor no válido en {chr(65 + col_total_por_actividad)}{i+1} (se esperaba un número).")
 
             if pd.notna(actividad_total) and float(actividad_total) != 0:
@@ -140,22 +141,22 @@ def transformar_excel(file_bytes: bytes, hoja: str):
 
         try:
             total_val = float(total)
-        except:
+        except (ValueError, TypeError):
             raise ValueError(f"Error en la fila {i+1}: valor no válido en {chr(65 + col_total)}{i+1} (se esperaba un número).")
 
         try:
             cantidad_val = float(cantidad)
-        except:
+        except (ValueError, TypeError):
             raise ValueError(f"Error en la fila {i+1}: valor no válido en {chr(65 + col_cant)}{i+1} (se esperaba un número).")
         try:
             precio_val = float(precio)
-        except:
+        except (ValueError, TypeError):
             raise ValueError(f"Error en la fila {i+1}: valor no válido en {chr(65 + col_precio)}{i+1} (se esperaba un número).")
         if pd.isna(item_presupuestario):
             raise ValueError(f"Error en la fila {i+1}: No puede estar vacia la celda {chr(65 + col_item)}{i+1} (se esperaba el item presupuestario).")
         try:
             item_presupuestario_val = int(item_presupuestario)
-        except:
+        except (ValueError, TypeError):
             raise ValueError(f"Error en la fila {i+1}: valor no válido en {chr(65 + col_item)}{i+1} (se esperaba el item presupuestario).")
         # Armamos programación ejecución
         programacion = {}
@@ -169,11 +170,11 @@ def transformar_excel(file_bytes: bytes, hoja: str):
                     raise ValueError(f"No se guardo nada en la base de datos.\nError en la fila {i+1}: valor no válido en {chr(65 + col_idx)}{i+1} (se esperaba un número).")
 
         
-        # Suman               
+        # Suman
         suman_val = fila[col_suman] if pd.notna(fila[col_suman]) else 0.0
         try:
             suman_val = float(suman_val)
-        except:
+        except (ValueError, TypeError):
             raise ValueError(f"Error en la fila {i+1}: valor no válido en {chr(65 + col_suman)}{i+1} (se esperaba un número).")
         programacion["suman"] = suman_val
 
@@ -216,12 +217,16 @@ def detectar_total_por_actividad(df, fila):
     Detecta todas las columnas que contienen 'TOTAL POR ACTIVIDAD' en una fila.
     Si hay más de una ocurrencia, lanza un error.
     Retorna la columna donde se encuentra la única ocurrencia.
+
+    Nota: Normaliza saltos de línea, tabs y espacios para mayor tolerancia.
     """
     columnas_encontradas = []
 
     # Recorrer todas las columnas de la fila
     for j, valor in enumerate(df.iloc[fila]):
-        if str(valor).strip().upper() == "TOTAL POR ACTIVIDAD":
+        # Normalizar: reemplazar saltos de línea y tabs con espacios, luego strip y upper
+        valor_normalizado = str(valor).replace('\n', ' ').replace('\t', ' ').strip().upper()
+        if valor_normalizado == "TOTAL POR ACTIVIDAD":
             columnas_encontradas.append(j)  # Registrar la columna encontrada
 
     # Verificar si hay más de una ocurrencia
