@@ -142,6 +142,7 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
     # ========== AGRUPAR TAREAS POR ACTIVIDAD ==========
 
     actividades_dict = defaultdict(list)
+    descripciones_actividades = {}  # Diccionario para guardar las descripciones de actividades
 
     # Si el POA no está vacío, agrupar tareas
     if not poa_vacio and reporte and reporte[0].get("nombre"):
@@ -153,6 +154,10 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
                 if len(partes) >= 1 and partes[0].strip().isdigit():
                     num_actividad = int(partes[0].strip())
                     actividades_dict[num_actividad].append(tarea)
+
+                    # Guardar descripción de actividad (del primer registro de cada actividad)
+                    if num_actividad not in descripciones_actividades:
+                        descripciones_actividades[num_actividad] = tarea.get("descripcion_actividad", f"Actividad {num_actividad}")
 
     actividades_ordenadas = sorted(actividades_dict.items())
 
@@ -203,63 +208,45 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
         'font_size': 11
     })
 
-    # Fila 1: VICERRECTORADO DE INVESTIGACIÓN, INNOVACIÓN Y VINCULACIÓN
-    worksheet.merge_range(fila_actual, 0, fila_actual, COL_TOTAL_POR_ACTIVIDAD,
+    # Fila 1: VACÍA
+    fila_actual += 1
+
+    # Fila 2: VICERRECTORADO DE INVESTIGACIÓN, INNOVACIÓN Y VINCULACIÓN (merge A-G)
+    worksheet.merge_range(fila_actual, 0, fila_actual, 6,
                           'VICERRECTORADO DE INVESTIGACIÓN, INNOVACIÓN Y VINCULACIÓN',
                           titulo_format)
     fila_actual += 1
 
-    # Fila 2: DIRECCIÓN DE INVESTIGACIÓN
-    worksheet.merge_range(fila_actual, 0, fila_actual, COL_TOTAL_POR_ACTIVIDAD,
+    # Fila 3: DIRECCIÓN DE INVESTIGACIÓN (merge A-G)
+    worksheet.merge_range(fila_actual, 0, fila_actual, 6,
                           'DIRECCIÓN DE INVESTIGACIÓN',
                           titulo_format)
     fila_actual += 1
 
-    # Fila 3: PROGRAMACIÓN PARA EL POA {año}
-    worksheet.merge_range(fila_actual, 0, fila_actual, COL_TOTAL_POR_ACTIVIDAD,
+    # Fila 4: PROGRAMACIÓN PARA EL POA {año} (merge A-G)
+    worksheet.merge_range(fila_actual, 0, fila_actual, 6,
                           f'PROGRAMACIÓN PARA EL POA {anio_poa}',
                           titulo_format)
     fila_actual += 1
 
-    # Fila 4: Vacía
-    fila_actual += 1
-
-    # Fila 5: PROYECTOS DE INVESTIGACIÓN (en azul)
-    proyectos_format = workbook.add_format({
-        'bold': True,
-        'align': 'center',
-        'valign': 'vcenter',
-        'font_size': 11,
-        'font_color': '#0070C0'  # Azul
-    })
-    worksheet.merge_range(fila_actual, 0, fila_actual, COL_TOTAL_POR_ACTIVIDAD,
+    # Fila 5: PROYECTOS DE INVESTIGACIÓN (merge A-G)
+    worksheet.merge_range(fila_actual, 0, fila_actual, 6,
                           'PROYECTOS DE INVESTIGACIÓN',
-                          proyectos_format)
+                          titulo_format)
     fila_actual += 1
 
-    # Fila 6: Vacía
-    fila_actual += 1
-
-    # Fila 7: CODIGO DE PROYECTO: {código}
+    # Fila 6: CODIGO DE PROYECTO: {código} (merge A-G)
     codigo_format = workbook.add_format({
         'align': 'center',
         'valign': 'vcenter',
         'font_size': 10
     })
-    codigo_valor_format = workbook.add_format({
-        'align': 'center',
-        'valign': 'vcenter',
-        'font_size': 10,
-        'font_color': '#C00000'  # Rojo
-    })
-
-    # Escribir "CODIGO DE PROYECTO:" en las primeras columnas y el código en rojo
-    worksheet.merge_range(fila_actual, 0, fila_actual, 2,
-                          'CODIGO DE PROYECTO:',
+    worksheet.merge_range(fila_actual, 0, fila_actual, 6,
+                          f'CODIGO DE PROYECTO: {codigo_proyecto}',
                           codigo_format)
-    worksheet.write(fila_actual, 3, codigo_proyecto, codigo_valor_format)
+    fila_actual += 1
 
-    # Escribir TOTAL POR ACTIVIDAD con fondo rosado
+    # Fila 7: TOTAL POR ACTIVIDAD en G7 y PROGRAMACIÓN DE EJECUCIÓN {año+1} en H7-T7
     total_header_format = workbook.add_format({
         'bold': True,
         'bg_color': '#FCE4D6',
@@ -270,6 +257,20 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
         'font_size': 9
     })
     worksheet.write(fila_actual, COL_TOTAL_POR_ACTIVIDAD, 'TOTAL POR\nACTIVIDAD', total_header_format)
+
+    # PROGRAMACIÓN DE EJECUCIÓN {año+1} desde H7 hasta T7
+    prog_ejecucion_format = workbook.add_format({
+        'bold': True,
+        'bg_color': '#D9D9D9',
+        'border': 1,
+        'align': 'center',
+        'valign': 'vcenter',
+        'font_size': 9
+    })
+    anio_siguiente = int(anio_poa) + 1
+    worksheet.merge_range(fila_actual, COL_MESES_INICIO, fila_actual, COL_SUMAN,
+                          f'PROGRAMACIÓN DE EJECUCIÓN {anio_siguiente}',
+                          prog_ejecucion_format)
     fila_actual += 1
 
     # ========== ESCRIBIR ENCABEZADOS DE COLUMNAS ==========
@@ -305,8 +306,9 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
         # Guardar fila de inicio de actividad para fórmulas
         fila_inicio_actividad = fila_actual
 
-        # FILA DE ACTIVIDAD
-        descripcion_actividad = f"({num_actividad}) Actividad {num_actividad}"
+        # FILA DE ACTIVIDAD - Usar descripción real desde la base de datos
+        descripcion_real = descripciones_actividades.get(num_actividad, f"Actividad {num_actividad}")
+        descripcion_actividad = f"({num_actividad}) {descripcion_real}"
         worksheet.write(fila_actual, COL_NOMBRE_TAREA, descripcion_actividad, actividad_format)
 
         # FÓRMULA: TOTAL POR ACTIVIDAD (suma de totales de tareas)
@@ -365,7 +367,18 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
 
     # ========== FILA FINAL: TOTAL PRESUPUESTO ==========
 
-    worksheet.write(fila_actual, COL_NOMBRE_TAREA, "TOTAL PRESUPUESTO", total_format)
+    # Merge de A a F con texto centrado "TOTAL PRESUPUESTO POA-{año}"
+    total_presupuesto_format = workbook.add_format({
+        'bold': True,
+        'bg_color': '#FFFF00',
+        'border': 1,
+        'align': 'center',
+        'valign': 'vcenter',
+        'font_size': 10
+    })
+    worksheet.merge_range(fila_actual, 0, fila_actual, COL_TOTAL,
+                          f'TOTAL PRESUPUESTO POA-{anio_poa}',
+                          total_presupuesto_format)
 
     # FÓRMULA: Suma de todas las columnas de meses
     for col_idx in range(COL_MESES_INICIO, COL_MESES_INICIO + 12):
@@ -381,10 +394,43 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
     worksheet.write_formula(fila_actual, COL_SUMAN, formula_suman_total, moneda_total_format)
 
     # FÓRMULA: TOTAL POR ACTIVIDAD (suma de todos los totales)
-    celda_inicio_total = xl_rowcol_to_cell(primera_fila_datos, COL_TOTAL)
-    celda_fin_total = xl_rowcol_to_cell(fila_fin_datos, COL_TOTAL)
+    celda_inicio_total = xl_rowcol_to_cell(primera_fila_datos, COL_TOTAL_POR_ACTIVIDAD)
+    celda_fin_total = xl_rowcol_to_cell(fila_fin_datos, COL_TOTAL_POR_ACTIVIDAD)
     formula_total_presupuesto = f"=SUM({celda_inicio_total}:{celda_fin_total})"
     worksheet.write_formula(fila_actual, COL_TOTAL_POR_ACTIVIDAD, formula_total_presupuesto, moneda_total_format)
+
+    fila_actual += 1
+
+    # ========== NOTAS AL FINAL ==========
+
+    # Formato para las notas (sin fondo, alineación izquierda)
+    nota_format = workbook.add_format({
+        'align': 'left',
+        'valign': 'vcenter',
+        'text_wrap': True,
+        'font_size': 9
+    })
+
+    # Saltar una fila
+    fila_actual += 1
+
+    # Merge de columnas A-G para las 3 notas
+    notas_texto = (
+        "Nota1: La planificación del POA 2024 corresponde a la ejecución presupuestaria que se "
+        "llevará a cabo a partir del inicio del proyecto hasta diciembre de 2026\n\n"
+        "Nota 2: En el caso que se requiera reformas presupuestarias o reformas al POA para la "
+        "inclusión o retiro de ítems, se deberá completar la matriz de reformas y realizar la "
+        "solicitud correspondiente\n\n"
+        "Nota 3: Considerar que las contrataciones de personal las podrán solicitar una vez que "
+        "ha iniciado el proyecto y estas iniciarán el mes siguiente a la solicitud."
+    )
+
+    worksheet.merge_range(fila_actual, 0, fila_actual + 2, 6, notas_texto, nota_format)
+
+    # Ajustar altura de las filas de notas para que se vean completas
+    worksheet.set_row(fila_actual, 60)
+    worksheet.set_row(fila_actual + 1, 60)
+    worksheet.set_row(fila_actual + 2, 60)
 
     workbook.close()
     output.seek(0)

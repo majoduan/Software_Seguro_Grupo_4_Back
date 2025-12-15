@@ -2436,7 +2436,19 @@ async def exportar_poa_individual(
                 )
             )
             programaciones = result_prog.scalars().all()
-            prog_mensual_dict = {prog.mes: round(float(prog.valor), 2) for prog in programaciones}
+
+            # Convertir formato MM-YYYY a nombres de meses en español
+            meses_espanol = {
+                "01": "enero", "02": "febrero", "03": "marzo", "04": "abril",
+                "05": "mayo", "06": "junio", "07": "julio", "08": "agosto",
+                "09": "septiembre", "10": "octubre", "11": "noviembre", "12": "diciembre"
+            }
+            prog_mensual_dict = {}
+            for prog in programaciones:
+                # prog.mes está en formato MM-YYYY (ej: "01-2026")
+                mes_num = prog.mes.split("-")[0]  # Extraer "01"
+                nombre_mes = meses_espanol.get(mes_num, prog.mes)
+                prog_mensual_dict[nombre_mes] = round(float(prog.valor), 2)
 
             tareas_lista.append({
                 "anio_poa": poa.anio_ejecucion,
@@ -2448,7 +2460,9 @@ async def exportar_poa_individual(
                 "cantidad": int(tarea.cantidad),
                 "precio_unitario": float(tarea.precio_unitario),
                 "total": float(tarea.total),
-                "programacion_mensual": prog_mensual_dict
+                "programacion_mensual": prog_mensual_dict,
+                "descripcion_actividad": actividad.descripcion_actividad,  # Agregar descripción de actividad
+                "numero_actividad": actividad.numero_actividad  # Agregar número de actividad
             })
 
     # Si no hay tareas, generar archivo vacío con solo encabezados
