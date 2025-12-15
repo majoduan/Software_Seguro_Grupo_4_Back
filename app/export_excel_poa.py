@@ -22,6 +22,7 @@ Características:
 """
 
 import io
+import re
 from collections import defaultdict
 import xlsxwriter
 
@@ -116,9 +117,9 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
         'font_size': 9
     })
 
-    # Moneda normal
+    # Moneda normal (formato contabilidad sin signo $)
     moneda_format = workbook.add_format({
-        'num_format': '"$"#,##0.00',
+        'num_format': '#,##0.00',
         'border': 1,
         'align': 'center',
         'valign': 'vcenter',
@@ -127,7 +128,7 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
 
     # Moneda en totales (amarillo)
     moneda_total_format = workbook.add_format({
-        'num_format': '"$"#,##0.00',
+        'num_format': '#,##0.00',
         'border': 1,
         'align': 'center',
         'valign': 'vcenter',
@@ -138,7 +139,7 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
 
     # Moneda en actividades (azul claro)
     moneda_actividad_format = workbook.add_format({
-        'num_format': '"$"#,##0.00',
+        'num_format': '#,##0.00',
         'border': 1,
         'align': 'center',
         'valign': 'vcenter',
@@ -175,8 +176,13 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
                     actividades_dict[num_actividad].append(tarea)
 
                     # Guardar descripción de actividad (del primer registro de cada actividad)
+                    # Remover el número de actividad si está duplicado al inicio
                     if num_actividad not in descripciones_actividades:
-                        descripciones_actividades[num_actividad] = tarea.get("descripcion_actividad", f"Actividad {num_actividad}")
+                        desc_raw = tarea.get("descripcion_actividad", f"Actividad {num_actividad}")
+                        # Remover formato "(1) " o "1. " al inicio si existe
+                        desc_limpia = re.sub(r'^\(\d+\)\s*', '', desc_raw)  # Remueve "(1) "
+                        desc_limpia = re.sub(r'^\d+\.\s*', '', desc_limpia)  # Remueve "1. "
+                        descripciones_actividades[num_actividad] = desc_limpia
 
     actividades_ordenadas = sorted(actividades_dict.items())
 
@@ -309,18 +315,21 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
 
     # ========== ESCRIBIR ENCABEZADOS DE COLUMNAS ==========
 
-    # Encabezado de columnas de datos
+    # Guardar la fila de encabezados para escribir la primera actividad aquí
+    fila_encabezados = fila_actual
+
+    # Encabezado de columnas de datos (solo columnas B-F)
     cabecera_datos = [
-        "",  # Columna vacía para nombres de actividad/tarea
-        "DESCRIPCIÓN O DETALLE",
-        "ITEM\nPRESUPUESTARIO",
-        "CANTIDAD\n(Meses de contrato)",
-        "PRECIO\nUNITARIO",
-        "TOTAL"
+        "DESCRIPCIÓN O DETALLE",       # B
+        "ITEM\nPRESUPUESTARIO",        # C
+        "CANTIDAD\n(Meses de contrato)", # D
+        "PRECIO\nUNITARIO",            # E
+        "TOTAL"                         # F
     ]
 
-    # Escribir encabezados principales (A-F)
-    for col_idx, header_text in enumerate(cabecera_datos):
+    # Escribir encabezados principales (B-F) - La columna A se llenará con la primera actividad
+    for i, header_text in enumerate(cabecera_datos):
+        col_idx = i + 1  # Empieza en columna B (índice 1)
         worksheet.write(fila_actual, col_idx, header_text, header_format)
 
     # Columna G: TOTAL POR ACTIVIDAD (encabezado ya escrito en fila 7, aquí va vacío)
@@ -334,11 +343,12 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
     # Columna T: SUMAN
     worksheet.write(fila_actual, COL_SUMAN, 'SUMAN', header_format)
 
-    fila_actual += 1
+    # NO incrementar fila_actual todavía - la primera actividad se escribirá en esta misma fila
 
     # ========== ESCRIBIR ACTIVIDADES Y TAREAS ==========
 
     primera_fila_datos = fila_actual  # Guardar para fórmulas de totales
+    es_primera_actividad = True
 
     for num_actividad, tareas_actividad in actividades_ordenadas:
         # Guardar fila de inicio de actividad para fórmulas
@@ -347,7 +357,14 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
         # FILA DE ACTIVIDAD - Usar descripción real desde la base de datos
         descripcion_real = descripciones_actividades.get(num_actividad, f"Actividad {num_actividad}")
         descripcion_actividad = f"({num_actividad}) {descripcion_real}"
-        worksheet.write(fila_actual, COL_NOMBRE_TAREA, descripcion_actividad, actividad_format)
+
+        if es_primera_actividad:
+            # La primera actividad se escribe en la fila de encabezados (fila 8)
+            worksheet.write(fila_actual, COL_NOMBRE_TAREA, descripcion_actividad, actividad_format)
+            es_primera_actividad = False
+        else:
+            # Las demás actividades se escriben normalmente
+            worksheet.write(fila_actual, COL_NOMBRE_TAREA, descripcion_actividad, actividad_format)
 
         # FÓRMULA: TOTAL POR ACTIVIDAD (suma de totales de tareas)
         # Se calculará después de escribir las tareas
