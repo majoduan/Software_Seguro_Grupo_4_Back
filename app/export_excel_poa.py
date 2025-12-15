@@ -1,14 +1,16 @@
 # export_excel_poa.py
 """
-Módulo para exportar POAs a Excel con formato institucional idéntico a la plantilla.
+Módulo para exportar POAs a Excel con formato institucional EXACTO de la plantilla.
 
 Características:
 - Nombre de hoja: "POA {año}" (ej: "POA 2025")
+- Encabezado institucional con título, dirección y código de proyecto
 - Cantidades sin decimales (formato entero)
-- Columnas de meses individuales OCULTAS (no visibles pero presentes)
+- Columnas de meses individuales VISIBLES (no ocultas)
 - Fórmulas automáticas de suma (=SUMA(), =CANTIDAD*PRECIO)
-- Colores institucionales (azul para actividades, amarillo para totales)
+- Colores institucionales EXACTOS de la plantilla
 - 100% compatible con transformador_excel.py para re-importación
+- Maneja POAs vacíos (genera solo encabezados)
 """
 
 import io
@@ -16,13 +18,14 @@ from collections import defaultdict
 import xlsxwriter
 
 
-def generar_excel_poa(reporte: list) -> io.BytesIO:
+def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
     """
-    Genera archivo Excel con formato institucional y compatible con importación.
+    Genera archivo Excel con formato institucional EXACTO y compatible con importación.
 
     Args:
         reporte: Lista de tareas con estructura:
             - anio_poa: str
+            - codigo_proyecto: str
             - nombre: str (formato "9.1 Descripción")
             - detalle_descripcion: str
             - item_presupuestario: str
@@ -30,6 +33,7 @@ def generar_excel_poa(reporte: list) -> io.BytesIO:
             - precio_unitario: float
             - total: float
             - programacion_mensual: dict (claves: "enero", "febrero", etc.)
+        poa_vacio: bool - Si True, genera archivo con solo encabezados
 
     Returns:
         BytesIO con el archivo Excel generado
@@ -37,8 +41,9 @@ def generar_excel_poa(reporte: list) -> io.BytesIO:
     output = io.BytesIO()
     workbook = xlsxwriter.Workbook(output, {'in_memory': True})
 
-    # Obtener año del POA
+    # Obtener año del POA y código de proyecto
     anio_poa = reporte[0]["anio_poa"] if reporte else ""
+    codigo_proyecto = reporte[0]["codigo_proyecto"] if reporte else ""
 
     # Crear hoja con nombre "POA {año}"
     worksheet = workbook.add_worksheet(f"POA {anio_poa}")
@@ -137,13 +142,17 @@ def generar_excel_poa(reporte: list) -> io.BytesIO:
     # ========== AGRUPAR TAREAS POR ACTIVIDAD ==========
 
     actividades_dict = defaultdict(list)
-    for tarea in reporte:
-        nombre_tarea = tarea["nombre"]
-        # Extraer número de actividad (ej: "9.1" -> 9)
-        partes = nombre_tarea.split(".")
-        if len(partes) >= 1 and partes[0].strip().isdigit():
-            num_actividad = int(partes[0].strip())
-            actividades_dict[num_actividad].append(tarea)
+
+    # Si el POA no está vacío, agrupar tareas
+    if not poa_vacio and reporte and reporte[0].get("nombre"):
+        for tarea in reporte:
+            nombre_tarea = tarea.get("nombre", "")
+            if nombre_tarea:  # Solo procesar tareas con nombre
+                # Extraer número de actividad (ej: "9.1" -> 9)
+                partes = nombre_tarea.split(".")
+                if len(partes) >= 1 and partes[0].strip().isdigit():
+                    num_actividad = int(partes[0].strip())
+                    actividades_dict[num_actividad].append(tarea)
 
     actividades_ordenadas = sorted(actividades_dict.items())
 
@@ -171,37 +180,121 @@ def generar_excel_poa(reporte: list) -> io.BytesIO:
     COL_SUMAN = 18
     COL_TOTAL_POR_ACTIVIDAD = 19
 
-    # Ajustar anchos de columna
+    # Ajustar anchos de columna (según plantilla)
     worksheet.set_column(COL_NOMBRE_TAREA, COL_NOMBRE_TAREA, 45)
     worksheet.set_column(COL_DESCRIPCION, COL_DESCRIPCION, 45)
     worksheet.set_column(COL_ITEM_PRESU, COL_ITEM_PRESU, 16)
-    worksheet.set_column(COL_CANTIDAD, COL_CANTIDAD, 8)
+    worksheet.set_column(COL_CANTIDAD, COL_CANTIDAD, 11)
     worksheet.set_column(COL_PRECIO_UNIT, COL_PRECIO_UNIT, 12)
     worksheet.set_column(COL_TOTAL, COL_TOTAL, 12)
-    worksheet.set_column(COL_MESES_INICIO, COL_MESES_INICIO + 11, 11)  # 12 meses
+    worksheet.set_column(COL_MESES_INICIO, COL_MESES_INICIO + 11, 11)  # 12 meses VISIBLES
     worksheet.set_column(COL_SUMAN, COL_SUMAN, 12)
     worksheet.set_column(COL_TOTAL_POR_ACTIVIDAD, COL_TOTAL_POR_ACTIVIDAD, 18)
 
-    # ========== OCULTAR COLUMNAS DE MESES INDIVIDUALES ==========
-    # Las columnas existen (para fórmulas) pero están ocultas visualmente
-    for col_mes in range(COL_MESES_INICIO, COL_MESES_INICIO + 12):
-        worksheet.set_column(col_mes, col_mes, None, None, {'hidden': True})
-
-    # ========== ESCRIBIR ENCABEZADOS ==========
+    # ========== ESCRIBIR ENCABEZADO INSTITUCIONAL ==========
 
     fila_actual = 0
 
-    # Encabezado (solo se escribe una vez al inicio)
-    cabecera = [
-        "",  # Columna de nombre de tarea
-        "DESCRIPCIÓN O DETALLE",
-        "ITEM PRESUPUESTARIO",
-        "CANTIDAD",
-        "PRECIO UNITARIO",
-        "TOTAL"
-    ] + fechas_headers + ["SUMAN", "TOTAL POR ACTIVIDAD"]
+    # Formato para encabezado institucional (sin bordes, centrado, negrita)
+    titulo_format = workbook.add_format({
+        'bold': True,
+        'align': 'center',
+        'valign': 'vcenter',
+        'font_size': 11
+    })
 
-    worksheet.write_row(fila_actual, 0, cabecera, header_format)
+    # Fila 1: VICERRECTORADO DE INVESTIGACIÓN, INNOVACIÓN Y VINCULACIÓN
+    worksheet.merge_range(fila_actual, 0, fila_actual, COL_TOTAL_POR_ACTIVIDAD,
+                          'VICERRECTORADO DE INVESTIGACIÓN, INNOVACIÓN Y VINCULACIÓN',
+                          titulo_format)
+    fila_actual += 1
+
+    # Fila 2: DIRECCIÓN DE INVESTIGACIÓN
+    worksheet.merge_range(fila_actual, 0, fila_actual, COL_TOTAL_POR_ACTIVIDAD,
+                          'DIRECCIÓN DE INVESTIGACIÓN',
+                          titulo_format)
+    fila_actual += 1
+
+    # Fila 3: PROGRAMACIÓN PARA EL POA {año}
+    worksheet.merge_range(fila_actual, 0, fila_actual, COL_TOTAL_POR_ACTIVIDAD,
+                          f'PROGRAMACIÓN PARA EL POA {anio_poa}',
+                          titulo_format)
+    fila_actual += 1
+
+    # Fila 4: Vacía
+    fila_actual += 1
+
+    # Fila 5: PROYECTOS DE INVESTIGACIÓN (en azul)
+    proyectos_format = workbook.add_format({
+        'bold': True,
+        'align': 'center',
+        'valign': 'vcenter',
+        'font_size': 11,
+        'font_color': '#0070C0'  # Azul
+    })
+    worksheet.merge_range(fila_actual, 0, fila_actual, COL_TOTAL_POR_ACTIVIDAD,
+                          'PROYECTOS DE INVESTIGACIÓN',
+                          proyectos_format)
+    fila_actual += 1
+
+    # Fila 6: Vacía
+    fila_actual += 1
+
+    # Fila 7: CODIGO DE PROYECTO: {código}
+    codigo_format = workbook.add_format({
+        'align': 'center',
+        'valign': 'vcenter',
+        'font_size': 10
+    })
+    codigo_valor_format = workbook.add_format({
+        'align': 'center',
+        'valign': 'vcenter',
+        'font_size': 10,
+        'font_color': '#C00000'  # Rojo
+    })
+
+    # Escribir "CODIGO DE PROYECTO:" en las primeras columnas y el código en rojo
+    worksheet.merge_range(fila_actual, 0, fila_actual, 2,
+                          'CODIGO DE PROYECTO:',
+                          codigo_format)
+    worksheet.write(fila_actual, 3, codigo_proyecto, codigo_valor_format)
+
+    # Escribir TOTAL POR ACTIVIDAD con fondo rosado
+    total_header_format = workbook.add_format({
+        'bold': True,
+        'bg_color': '#FCE4D6',
+        'border': 1,
+        'align': 'center',
+        'valign': 'vcenter',
+        'text_wrap': True,
+        'font_size': 9
+    })
+    worksheet.write(fila_actual, COL_TOTAL_POR_ACTIVIDAD, 'TOTAL POR\nACTIVIDAD', total_header_format)
+    fila_actual += 1
+
+    # ========== ESCRIBIR ENCABEZADOS DE COLUMNAS ==========
+
+    # Encabezado de columnas de datos
+    cabecera_datos = [
+        "",  # Columna vacía para nombres de actividad/tarea
+        "DESCRIPCIÓN O DETALLE",
+        "ITEM\nPRESUPUESTARIO",
+        "CANTIDAD\n(Meses de contrato)",
+        "PRECIO\nUNITARIO",
+        "TOTAL"
+    ]
+
+    # Escribir encabezados principales
+    for col_idx, header_text in enumerate(cabecera_datos):
+        worksheet.write(fila_actual, col_idx, header_text, header_format)
+
+    # Escribir encabezados de meses (fechas)
+    for col_idx, fecha in enumerate(fechas_headers, start=COL_MESES_INICIO):
+        worksheet.write(fila_actual, col_idx, fecha, header_format)
+
+    # Escribir SUMAN
+    worksheet.write(fila_actual, COL_SUMAN, 'SUMAN', header_format)
+
     fila_actual += 1
 
     # ========== ESCRIBIR ACTIVIDADES Y TAREAS ==========

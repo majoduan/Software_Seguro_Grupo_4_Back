@@ -2325,45 +2325,51 @@ async def obtener_resumen_poas(
     }
 
 
-@app.post("/proyectos/{id_proyecto}/exportar-poas")
-async def exportar_poas_proyecto(
+@app.post("/proyectos/{id_proyecto}/poas/{id_poa}/exportar")
+async def exportar_poa_individual(
     id_proyecto: uuid.UUID,
+    id_poa: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     usuario: models.Usuario = Depends(get_current_user)
 ):
     """
-    Exporta todos los POAs de un proyecto en formato Excel institucional compatible con re-importación.
+    Exporta un POA individual en formato Excel institucional compatible con re-importación.
 
-    Este endpoint genera un archivo Excel con formato institucional que puede ser re-importado
-    mediante el transformador de Excel. Incluye:
+    Este endpoint genera un archivo Excel con formato institucional EXACTO de la plantilla
+    que puede ser re-importado mediante el transformador de Excel. Incluye:
     - Nombre de hoja: "POA {año}"
+    - Encabezado institucional con título, dirección, y código de proyecto
     - Actividades agrupadas con formato (1), (2), (3)...
     - Cantidades sin decimales
-    - Columnas de meses individuales OCULTAS
+    - Columnas de meses individuales VISIBLES (no ocultas)
     - Fórmulas automáticas (=SUMA(), =CANTIDAD*PRECIO)
-    - Colores institucionales
+    - Colores institucionales EXACTOS de la plantilla
+    - Maneja POAs vacíos (retorna archivo con solo encabezados)
 
     Objetivo:
-        Permitir la exportación de POAs desde /ver-proyectos con el botón "Exportar Excel"
-        usando el mismo formato que se importa.
+        Permitir la exportación de POAs individuales desde /ver-proyectos con el menú dropdown
+        usando el mismo formato visual que la plantilla institucional.
 
     Parámetros:
         - id_proyecto (UUID): Identificador único del proyecto
+        - id_poa (UUID): Identificador único del POA a exportar
         - db (AsyncSession): Sesión de base de datos
         - usuario (Usuario): Usuario autenticado
 
     Operación:
         1. Valida que el proyecto existe
-        2. Obtiene todos los POAs del proyecto con sus actividades y tareas
-        3. Obtiene la programación mensual de cada tarea
-        4. Estructura los datos en formato compatible con export_excel_poa.py
-        5. Genera el archivo Excel usando generar_excel_poa()
+        2. Valida que el POA existe y pertenece al proyecto
+        3. Obtiene actividades y tareas del POA (si existen)
+        4. Si no hay tareas, genera archivo con solo encabezados
+        5. Obtiene la programación mensual de cada tarea
+        6. Estructura los datos en formato compatible con export_excel_poa.py
+        7. Genera el archivo Excel usando generar_excel_poa()
 
     Retorna:
-        - StreamingResponse: Archivo Excel con todos los POAs del proyecto
+        - StreamingResponse: Archivo Excel con el POA exportado
 
     Excepciones:
-        - HTTPException 404: Si el proyecto no existe o no tiene POAs
+        - HTTPException 404: Si el proyecto o POA no existen
     """
     from app.export_excel_poa import generar_excel_poa
 
@@ -2375,86 +2381,97 @@ async def exportar_poas_proyecto(
     if not proyecto:
         raise HTTPException(status_code=404, detail="Proyecto no encontrado")
 
-    # Obtener todos los POAs del proyecto
+    # Validar que el POA existe y pertenece al proyecto
     result = await db.execute(
         select(models.Poa)
+        .where(models.Poa.id_poa == id_poa)
         .where(models.Poa.id_proyecto == id_proyecto)
-        .order_by(models.Poa.anio_ejecucion.asc())
     )
-    poas = result.scalars().all()
+    poa = result.scalar_one_or_none()
+    if not poa:
+        raise HTTPException(status_code=404, detail="POA no encontrado o no pertenece al proyecto")
 
-    if not poas:
-        raise HTTPException(status_code=404, detail="El proyecto no tiene POAs asignados")
+    # Obtener actividades del POA
+    result = await db.execute(
+        select(models.Actividad)
+        .where(models.Actividad.id_poa == poa.id_poa)
+        .order_by(models.Actividad.numero_actividad.asc())
+    )
+    actividades = result.scalars().all()
 
-    # Estructurar datos para cada POA
+    # Estructurar datos para el POA
     tareas_lista = []
 
-    for poa in poas:
-        # Obtener actividades del POA
+    for actividad in actividades:
+        # Obtener tareas de la actividad
         result = await db.execute(
-            select(models.Actividad)
-            .where(models.Actividad.id_poa == poa.id_poa)
-            .order_by(models.Actividad.numero_actividad.asc())
+            select(models.Tarea)
+            .where(models.Tarea.id_actividad == actividad.id_actividad)
         )
-        actividades = result.scalars().all()
+        tareas = result.scalars().all()
 
-        for actividad in actividades:
-            # Obtener tareas de la actividad
+        for tarea in tareas:
+            # Obtener item presupuestario
             result = await db.execute(
-                select(models.Tarea)
-                .where(models.Tarea.id_actividad == actividad.id_actividad)
+                select(models.DetalleTarea).where(
+                    models.DetalleTarea.id_detalle_tarea == tarea.id_detalle_tarea
+                )
             )
-            tareas = result.scalars().all()
-
-            for tarea in tareas:
-                # Obtener item presupuestario
+            detalle = result.scalars().first()
+            item_presupuestario = None
+            if detalle:
                 result = await db.execute(
-                    select(models.DetalleTarea).where(
-                        models.DetalleTarea.id_detalle_tarea == tarea.id_detalle_tarea
+                    select(models.ItemPresupuestario).where(
+                        models.ItemPresupuestario.id_item_presupuestario == detalle.id_item_presupuestario
                     )
                 )
-                detalle = result.scalars().first()
-                item_presupuestario = None
-                if detalle:
-                    result = await db.execute(
-                        select(models.ItemPresupuestario).where(
-                            models.ItemPresupuestario.id_item_presupuestario == detalle.id_item_presupuestario
-                        )
-                    )
-                    item = result.scalars().first()
-                    if item:
-                        item_presupuestario = item.codigo
+                item = result.scalars().first()
+                if item:
+                    item_presupuestario = item.codigo
 
-                # Obtener programación mensual
-                result_prog = await db.execute(
-                    select(models.ProgramacionMensual).where(
-                        models.ProgramacionMensual.id_tarea == tarea.id_tarea
-                    )
+            # Obtener programación mensual
+            result_prog = await db.execute(
+                select(models.ProgramacionMensual).where(
+                    models.ProgramacionMensual.id_tarea == tarea.id_tarea
                 )
-                programaciones = result_prog.scalars().all()
-                prog_mensual_dict = {prog.mes: round(float(prog.valor), 2) for prog in programaciones}
+            )
+            programaciones = result_prog.scalars().all()
+            prog_mensual_dict = {prog.mes: round(float(prog.valor), 2) for prog in programaciones}
 
-                tareas_lista.append({
-                    "anio_poa": poa.anio_ejecucion,
-                    "codigo_proyecto": proyecto.codigo_proyecto,
-                    "tipo_proyecto": "",  # No necesario para export_excel_poa
-                    "nombre": tarea.nombre,
-                    "detalle_descripcion": tarea.detalle_descripcion,
-                    "item_presupuestario": item_presupuestario or "",
-                    "cantidad": int(tarea.cantidad),
-                    "precio_unitario": float(tarea.precio_unitario),
-                    "total": float(tarea.total),
-                    "programacion_mensual": prog_mensual_dict
-                })
+            tareas_lista.append({
+                "anio_poa": poa.anio_ejecucion,
+                "codigo_proyecto": proyecto.codigo_proyecto,
+                "tipo_proyecto": "",  # No necesario para export_excel_poa
+                "nombre": tarea.nombre,
+                "detalle_descripcion": tarea.detalle_descripcion,
+                "item_presupuestario": item_presupuestario or "",
+                "cantidad": int(tarea.cantidad),
+                "precio_unitario": float(tarea.precio_unitario),
+                "total": float(tarea.total),
+                "programacion_mensual": prog_mensual_dict
+            })
 
+    # Si no hay tareas, generar archivo vacío con solo encabezados
     if not tareas_lista:
-        raise HTTPException(status_code=404, detail="No hay tareas para exportar")
+        # Agregar estructura mínima para generar encabezados
+        tareas_lista = [{
+            "anio_poa": poa.anio_ejecucion,
+            "codigo_proyecto": proyecto.codigo_proyecto,
+            "tipo_proyecto": "",
+            "nombre": "",
+            "detalle_descripcion": "",
+            "item_presupuestario": "",
+            "cantidad": 0,
+            "precio_unitario": 0.0,
+            "total": 0.0,
+            "programacion_mensual": {}
+        }]
 
     # Generar archivo Excel usando export_excel_poa
-    output = generar_excel_poa(tareas_lista)
+    output = generar_excel_poa(tareas_lista, poa_vacio=(len(actividades) == 0))
 
     # Determinar nombre del archivo
-    nombre_archivo = f"POAs_{proyecto.codigo_proyecto}.xlsx"
+    nombre_archivo = f"POA_{poa.anio_ejecucion}_{proyecto.codigo_proyecto}.xlsx"
 
     return StreamingResponse(
         output,
