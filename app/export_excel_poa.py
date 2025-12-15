@@ -19,6 +19,8 @@ Características:
 - Colores institucionales EXACTOS de la plantilla
 - 100% compatible con transformador_excel.py para re-importación
 - Maneja POAs vacíos (genera solo encabezados)
+- CRÍTICO: La primera actividad (1) se escribe en la fila 8 (misma fila que encabezados B-F)
+  esto es requerido por transformador_excel.py que busca "(1)" en columna A de esa fila
 """
 
 import io
@@ -315,9 +317,6 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
 
     # ========== ESCRIBIR ENCABEZADOS DE COLUMNAS ==========
 
-    # Guardar la fila de encabezados para escribir la primera actividad aquí
-    fila_encabezados = fila_actual
-
     # Encabezado de columnas de datos (solo columnas B-F)
     cabecera_datos = [
         "DESCRIPCIÓN O DETALLE",       # B
@@ -327,13 +326,10 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
         "TOTAL"                         # F
     ]
 
-    # Escribir encabezados principales (B-F) - La columna A se llenará con la primera actividad
+    # Escribir encabezados principales (B-F)
     for i, header_text in enumerate(cabecera_datos):
         col_idx = i + 1  # Empieza en columna B (índice 1)
         worksheet.write(fila_actual, col_idx, header_text, header_format)
-
-    # Columna G: TOTAL POR ACTIVIDAD (encabezado ya escrito en fila 7, aquí va vacío)
-    # No se escribe nada aquí
 
     # Escribir encabezados de meses (H-S) usando objetos datetime con formato mmm-yy
     for i, fecha_obj in enumerate(fechas_excel):
@@ -343,33 +339,46 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
     # Columna T: SUMAN
     worksheet.write(fila_actual, COL_SUMAN, 'SUMAN', header_format)
 
-    # NO incrementar fila_actual todavía - la primera actividad se escribirá en esta misma fila
+    # CRÍTICO: Columna A debe contener la primera actividad (1) en esta misma fila
+    # Esto es requerido por transformador_excel.py que busca "(1)" en columna A de esta fila
+
+    # Si hay actividades, escribir la primera actividad en columna A de esta fila
+    if actividades_ordenadas:
+        primer_num, _ = actividades_ordenadas[0]
+        descripcion_primera = descripciones_actividades.get(primer_num, f"Actividad {primer_num}")
+        descripcion_primera_actividad = f"({primer_num}) {descripcion_primera}"
+        worksheet.write(fila_actual, COL_NOMBRE_TAREA, descripcion_primera_actividad, actividad_format)
+        # Escribir 0 en columna G (TOTAL POR ACTIVIDAD) - se sobrescribirá con fórmula después
+        worksheet.write_number(fila_actual, COL_TOTAL_POR_ACTIVIDAD, 0, moneda_format)
+    else:
+        # Si no hay actividades (POA vacío), dejar columna A vacía
+        # Escribir encabezado vacío en columna G
+        worksheet.write(fila_actual, COL_TOTAL_POR_ACTIVIDAD, "", header_format)
+
+    # Guardar fila de encabezados para cálculos
+    fila_encabezados = fila_actual
+    fila_actual += 1
 
     # ========== ESCRIBIR ACTIVIDADES Y TAREAS ==========
 
-    primera_fila_datos = fila_actual  # Guardar para fórmulas de totales
-    es_primera_actividad = True
+    primera_fila_datos = fila_encabezados  # Guardar para fórmulas de totales (incluye primera actividad)
+    primera_actividad_procesada = False
+    filas_actividades = []  # Rastrear filas que contienen actividades para el total
 
     for num_actividad, tareas_actividad in actividades_ordenadas:
-        # Guardar fila de inicio de actividad para fórmulas
-        fila_inicio_actividad = fila_actual
-
-        # FILA DE ACTIVIDAD - Usar descripción real desde la base de datos
-        descripcion_real = descripciones_actividades.get(num_actividad, f"Actividad {num_actividad}")
-        descripcion_actividad = f"({num_actividad}) {descripcion_real}"
-
-        if es_primera_actividad:
-            # La primera actividad se escribe en la fila de encabezados (fila 8)
-            worksheet.write(fila_actual, COL_NOMBRE_TAREA, descripcion_actividad, actividad_format)
-            es_primera_actividad = False
+        if not primera_actividad_procesada:
+            # La primera actividad ya fue escrita en la fila de encabezados
+            fila_actividad_actual = fila_encabezados
+            filas_actividades.append(fila_encabezados)
+            primera_actividad_procesada = True
         else:
-            # Las demás actividades se escriben normalmente
+            # Las demás actividades se escriben normalmente en su propia fila
+            descripcion_real = descripciones_actividades.get(num_actividad, f"Actividad {num_actividad}")
+            descripcion_actividad = f"({num_actividad}) {descripcion_real}"
             worksheet.write(fila_actual, COL_NOMBRE_TAREA, descripcion_actividad, actividad_format)
-
-        # FÓRMULA: TOTAL POR ACTIVIDAD (suma de totales de tareas)
-        # Se calculará después de escribir las tareas
-        fila_actividad_actual = fila_actual
-        fila_actual += 1
+            fila_actividad_actual = fila_actual
+            filas_actividades.append(fila_actual)
+            fila_actual += 1
 
         # FILAS DE TAREAS
         fila_inicio_tareas = fila_actual
@@ -451,10 +460,13 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
     formula_suman_total = f"=SUM({celda_inicio_suman}:{celda_fin_suman})"
     worksheet.write_formula(fila_actual, COL_SUMAN, formula_suman_total, moneda_total_format)
 
-    # FÓRMULA: TOTAL POR ACTIVIDAD (suma de todos los totales)
-    celda_inicio_total = xl_rowcol_to_cell(primera_fila_datos, COL_TOTAL_POR_ACTIVIDAD)
-    celda_fin_total = xl_rowcol_to_cell(fila_fin_datos, COL_TOTAL_POR_ACTIVIDAD)
-    formula_total_presupuesto = f"=SUM({celda_inicio_total}:{celda_fin_total})"
+    # FÓRMULA: TOTAL POR ACTIVIDAD (suma solo de las filas de actividades, no de todas las tareas)
+    # Construir fórmula que sume solo las celdas de actividades: =G8+G12+G16 (ejemplo)
+    if filas_actividades:
+        celdas_actividades = [xl_rowcol_to_cell(fila, COL_TOTAL_POR_ACTIVIDAD) for fila in filas_actividades]
+        formula_total_presupuesto = f"={'+'.join(celdas_actividades)}"
+    else:
+        formula_total_presupuesto = "=0"
     worksheet.write_formula(fila_actual, COL_TOTAL_POR_ACTIVIDAD, formula_total_presupuesto, moneda_total_format)
 
     fila_actual += 1
