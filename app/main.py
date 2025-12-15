@@ -2324,6 +2324,145 @@ async def obtener_resumen_poas(
         "total_proyecto": total_proyecto
     }
 
+
+@app.post("/proyectos/{id_proyecto}/exportar-poas")
+async def exportar_poas_proyecto(
+    id_proyecto: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    """
+    Exporta todos los POAs de un proyecto en formato Excel institucional compatible con re-importación.
+
+    Este endpoint genera un archivo Excel con formato institucional que puede ser re-importado
+    mediante el transformador de Excel. Incluye:
+    - Nombre de hoja: "POA {año}"
+    - Actividades agrupadas con formato (1), (2), (3)...
+    - Cantidades sin decimales
+    - Columnas de meses individuales OCULTAS
+    - Fórmulas automáticas (=SUMA(), =CANTIDAD*PRECIO)
+    - Colores institucionales
+
+    Objetivo:
+        Permitir la exportación de POAs desde /ver-proyectos con el botón "Exportar Excel"
+        usando el mismo formato que se importa.
+
+    Parámetros:
+        - id_proyecto (UUID): Identificador único del proyecto
+        - db (AsyncSession): Sesión de base de datos
+        - usuario (Usuario): Usuario autenticado
+
+    Operación:
+        1. Valida que el proyecto existe
+        2. Obtiene todos los POAs del proyecto con sus actividades y tareas
+        3. Obtiene la programación mensual de cada tarea
+        4. Estructura los datos en formato compatible con export_excel_poa.py
+        5. Genera el archivo Excel usando generar_excel_poa()
+
+    Retorna:
+        - StreamingResponse: Archivo Excel con todos los POAs del proyecto
+
+    Excepciones:
+        - HTTPException 404: Si el proyecto no existe o no tiene POAs
+    """
+    from app.export_excel_poa import generar_excel_poa
+
+    # Validar que el proyecto existe
+    result = await db.execute(
+        select(models.Proyecto).where(models.Proyecto.id_proyecto == id_proyecto)
+    )
+    proyecto = result.scalar_one_or_none()
+    if not proyecto:
+        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+
+    # Obtener todos los POAs del proyecto
+    result = await db.execute(
+        select(models.Poa)
+        .where(models.Poa.id_proyecto == id_proyecto)
+        .order_by(models.Poa.anio_ejecucion.asc())
+    )
+    poas = result.scalars().all()
+
+    if not poas:
+        raise HTTPException(status_code=404, detail="El proyecto no tiene POAs asignados")
+
+    # Estructurar datos para cada POA
+    tareas_lista = []
+
+    for poa in poas:
+        # Obtener actividades del POA
+        result = await db.execute(
+            select(models.Actividad)
+            .where(models.Actividad.id_poa == poa.id_poa)
+            .order_by(models.Actividad.numero_actividad.asc())
+        )
+        actividades = result.scalars().all()
+
+        for actividad in actividades:
+            # Obtener tareas de la actividad
+            result = await db.execute(
+                select(models.Tarea)
+                .where(models.Tarea.id_actividad == actividad.id_actividad)
+            )
+            tareas = result.scalars().all()
+
+            for tarea in tareas:
+                # Obtener item presupuestario
+                result = await db.execute(
+                    select(models.DetalleTarea).where(
+                        models.DetalleTarea.id_detalle_tarea == tarea.id_detalle_tarea
+                    )
+                )
+                detalle = result.scalars().first()
+                item_presupuestario = None
+                if detalle:
+                    result = await db.execute(
+                        select(models.ItemPresupuestario).where(
+                            models.ItemPresupuestario.id_item_presupuestario == detalle.id_item_presupuestario
+                        )
+                    )
+                    item = result.scalars().first()
+                    if item:
+                        item_presupuestario = item.codigo
+
+                # Obtener programación mensual
+                result_prog = await db.execute(
+                    select(models.ProgramacionMensual).where(
+                        models.ProgramacionMensual.id_tarea == tarea.id_tarea
+                    )
+                )
+                programaciones = result_prog.scalars().all()
+                prog_mensual_dict = {prog.mes: round(float(prog.valor), 2) for prog in programaciones}
+
+                tareas_lista.append({
+                    "anio_poa": poa.anio_ejecucion,
+                    "codigo_proyecto": proyecto.codigo_proyecto,
+                    "tipo_proyecto": "",  # No necesario para export_excel_poa
+                    "nombre": tarea.nombre,
+                    "detalle_descripcion": tarea.detalle_descripcion,
+                    "item_presupuestario": item_presupuestario or "",
+                    "cantidad": int(tarea.cantidad),
+                    "precio_unitario": float(tarea.precio_unitario),
+                    "total": float(tarea.total),
+                    "programacion_mensual": prog_mensual_dict
+                })
+
+    if not tareas_lista:
+        raise HTTPException(status_code=404, detail="No hay tareas para exportar")
+
+    # Generar archivo Excel usando export_excel_poa
+    output = generar_excel_poa(tareas_lista)
+
+    # Determinar nombre del archivo
+    nombre_archivo = f"POAs_{proyecto.codigo_proyecto}.xlsx"
+
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={nombre_archivo}"}
+    )
+
+
 @app.post("/transformar_excel/")
 async def transformar_archivo_excel(
     file: UploadFile = File(...),
@@ -2710,6 +2849,7 @@ async def reporte_poa(
         poa = next((p for p in poas if actividad and p.id_poa == actividad.id_poa), None)
         proyecto = next((pr for pr in proyectos if poa and pr.id_proyecto == poa.id_proyecto), None)
         tipo_proyecto_codigo = next((tp.codigo_tipo for tp in tipos_proyecto if proyecto and tp.id_tipo_proyecto == proyecto.id_tipo_proyecto), "") if proyecto else ""
+        presupuesto_aprobado = proyecto.presupuesto_aprobado if proyecto else 0
 
         # Item presupuestario
         result = await db.execute(
@@ -2736,6 +2876,7 @@ async def reporte_poa(
             "anio_poa": poa.anio_ejecucion if poa else "",
             "codigo_proyecto": proyecto.codigo_proyecto if proyecto else "",
             "tipo_proyecto": tipo_proyecto_codigo,
+            "presupuesto_aprobado": float(presupuesto_aprobado) if presupuesto_aprobado else 0,
             "nombre": tarea.nombre,
             "detalle_descripcion": tarea.detalle_descripcion,
             "item_presupuestario": item_presupuestario,
@@ -2753,20 +2894,76 @@ async def descargar_excel(
     reporte: list = Body(...)
 ):
     """
-    Genera archivo Excel con formato institucional y compatible para re-importación.
+    Genera archivo Excel con resumen anual de POAs (formato simple, no institucional).
 
-    Características:
-    - Nombre de hoja: "POA {año}" (ej: "POA 2025")
-    - Actividades agrupadas con formato (1), (2), (3)...
-    - Cantidades sin decimales (formato entero)
-    - Columnas de meses individuales OCULTAS
-    - Fórmulas automáticas: =SUMA(), =CANTIDAD*PRECIO
-    - Colores institucionales (azul actividades, amarillo totales)
-    - 100% compatible con transformador_excel.py
+    Este endpoint es para el módulo /reporte-poa (resumen anual por tipo de proyecto).
+    Para exportación institucional compatible con re-importación, usar /proyectos/{id}/exportar-poas
     """
-    from app.export_excel_poa import generar_excel_poa
+    output = io.BytesIO()
+    workbook = xlsxwriter.Workbook(output, {'in_memory': True})
+    worksheet = workbook.add_worksheet("Reporte POA")
 
-    output = generar_excel_poa(reporte)
+    # Formatos
+    header = workbook.add_format({'bold': True, 'bg_color': '#D9D9D9', 'border': 1, 'align': 'center', 'valign': 'vcenter', 'text_wrap': True})
+    centro = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'text_wrap': True})
+    moneda = workbook.add_format({'num_format': '"$"#,##0.00', 'border': 1, 'align': 'center', 'valign': 'vcenter', 'text_wrap': True})
+    texto = workbook.add_format({'border': 1, 'align': 'left', 'valign': 'vcenter', 'text_wrap': True})
+
+    # Detectar todos los meses presentes en todas las tareas
+    meses_presentes = set()
+    for tarea in reporte:
+        meses_presentes.update(tarea.get("programacion_mensual", {}).keys())
+    meses_orden = [
+        "enero", "febrero", "marzo", "abril", "mayo", "junio",
+        "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+    ]
+    meses_final = meses_orden
+
+    # Cabecera
+    cabecera = [
+        "AÑO POA", "CODIGO PROYECTO", "Tipo de Proyecto", "Presupuesto Aprobado", "Tarea",
+        "Detalle Descripción",
+        "Item Presupuestario", "Cantidad", "Precio Unitario", "Total Tarea"
+    ] + [m.capitalize() for m in meses_final]
+    worksheet.write_row(0, 0, cabecera, header)
+
+    # Ajustar anchos de columna
+    worksheet.set_column(0, 0, 10)   # Año POA
+    worksheet.set_column(1, 1, 15)   # Código Proyecto
+    worksheet.set_column(2, 2, 15)   # Tipo de Proyecto
+    worksheet.set_column(3, 3, 18)   # Presupuesto Aprobado
+    worksheet.set_column(4, 4, 45)   # Tarea
+    worksheet.set_column(5, 5, 45)   # Detalle Descripción
+    worksheet.set_column(6, 6, 16)   # Item Presupuestario
+    worksheet.set_column(7, 7, 8)    # Cantidad
+    worksheet.set_column(8, 8, 12)   # Precio Unitario
+    worksheet.set_column(9, 9, 12)   # Total Tarea
+    worksheet.set_column(10, 10 + len(meses_final) - 1, 11)  # Meses
+
+    # Filas de tareas
+    for row, tarea in enumerate(reporte, start=1):
+        worksheet.write(row, 0, tarea["anio_poa"], centro)
+        worksheet.write(row, 1, tarea["codigo_proyecto"], centro)
+        worksheet.write(row, 2, tarea["tipo_proyecto"], centro)
+        worksheet.write_number(row, 3, tarea["presupuesto_aprobado"], moneda)
+        worksheet.write(row, 4, tarea["nombre"], texto)
+        worksheet.write(row, 5, tarea["detalle_descripcion"], texto)
+        worksheet.write(row, 6, tarea["item_presupuestario"], centro)
+        worksheet.write_number(row, 7, tarea["cantidad"], centro)
+        worksheet.write_number(row, 8, tarea["precio_unitario"], moneda)
+        worksheet.write_number(row, 9, tarea["total"], moneda)
+        for col, mes in enumerate(meses_final, start=10):
+            valor_mes = tarea.get("programacion_mensual", {}).get(mes, 0)
+            worksheet.write_number(row, col, valor_mes, moneda)
+
+    # Agregar fecha de descarga al final
+    zona_utc_minus_5 = timezone(timedelta(hours=-5))
+    fecha_descarga = datetime.now(zona_utc_minus_5).strftime("%d/%m/%Y %H:%M")
+    fila_fecha = len(reporte) + 2
+    worksheet.write(fila_fecha, 0, "Fecha de descarga:", centro)
+    worksheet.write(fila_fecha, 1, fecha_descarga, centro)
+    workbook.close()
+    output.seek(0)
 
     return StreamingResponse(
         output,
