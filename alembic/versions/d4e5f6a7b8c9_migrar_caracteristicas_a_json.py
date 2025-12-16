@@ -68,11 +68,13 @@ def upgrade():
         ptt_val = None if partes[1] == '0' else partes[1]
         otros_val = None if partes[2] == '0' else partes[2]
 
+        # IMPORTANTE: sort_keys=True y separators consistentes
+        # Esto garantiza formato idéntico al usado en init_data.py
         carac_nueva = json.dumps({
             "PIM": pim_val,
             "PTT": ptt_val,
             "OTROS": otros_val
-        })
+        }, sort_keys=True, separators=(',', ':'))
 
         # Actualizar registro
         bind.execute(

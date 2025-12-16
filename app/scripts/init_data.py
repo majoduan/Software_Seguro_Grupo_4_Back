@@ -40,6 +40,7 @@ def convertir_caracteristicas_a_json(caracteristicas_antiguo: str) -> str:
 
     Retorna:
         String JSON con formato {"PIM": ..., "PTT": ..., "OTROS": ...}
+        IMPORTANTE: Usa sort_keys=True y separators para garantizar formato consistente
     """
     partes = caracteristicas_antiguo.split('; ')
 
@@ -52,11 +53,13 @@ def convertir_caracteristicas_a_json(caracteristicas_antiguo: str) -> str:
     ptt_val = None if partes[1] == '0' else partes[1]
     otros_val = None if partes[2] == '0' else partes[2]
 
+    # IMPORTANTE: sort_keys=True y separators consistentes para evitar duplicados
+    # Esto garantiza que el JSON siempre se serialice de la misma forma
     return json.dumps({
         "PIM": pim_val,
         "PTT": ptt_val,
         "OTROS": otros_val
-    })
+    }, sort_keys=True, separators=(',', ':'))
 
 
 # Esta función sirve para llenar la base de datos con datos iniciales
