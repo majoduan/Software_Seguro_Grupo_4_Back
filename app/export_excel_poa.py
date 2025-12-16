@@ -298,7 +298,7 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
         'text_wrap': True,
         'font_size': 9
     })
-    worksheet.write(fila_actual, COL_TOTAL_POR_ACTIVIDAD, 'TOTAL POR\nACTIVIDAD', total_header_format)
+    worksheet.write(fila_actual, COL_TOTAL_POR_ACTIVIDAD, 'TOTAL POR ACTIVIDAD', total_header_format)
 
     # PROGRAMACIÓN DE EJECUCIÓN {año+1} desde H7 hasta T7
     prog_ejecucion_format = workbook.add_format({
@@ -320,9 +320,9 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
     # Encabezado de columnas de datos (solo columnas B-F)
     cabecera_datos = [
         "DESCRIPCIÓN O DETALLE",       # B
-        "ITEM\nPRESUPUESTARIO",        # C
-        "CANTIDAD\n(Meses de contrato)", # D
-        "PRECIO\nUNITARIO",            # E
+        "ITEM PRESUPUESTARIO",         # C
+        "CANTIDAD (Meses de contrato)", # D
+        "PRECIO UNITARIO",             # E
         "TOTAL"                         # F
     ]
 
