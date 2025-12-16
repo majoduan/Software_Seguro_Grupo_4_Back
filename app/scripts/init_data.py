@@ -779,21 +779,23 @@ async def seed_all_data():
 
     # Función para crear DetalleTarea si no existe
     async def crear_detalle_tarea_si_no_existe(db, item_presupuestario, nombre, descripcion, características, precio_unitario=None):
+        # IMPORTANTE: Convertir características a JSON ANTES de buscar
+        # Esto evita duplicados al comparar con registros ya migrados a JSON
+        caracteristicas_json = convertir_caracteristicas_a_json(características)
+
         result = await db.execute(
             select(DetalleTarea).where(
                 and_(
                     DetalleTarea.id_item_presupuestario == item_presupuestario.id_item_presupuestario,
                     DetalleTarea.nombre == nombre,
                     DetalleTarea.descripcion == descripcion,
-                    DetalleTarea.caracteristicas == características
+                    DetalleTarea.caracteristicas == caracteristicas_json
                 )
             )
         )
         detalle_existente = result.scalars().first()
 
         if not detalle_existente:
-            # Convertir características al nuevo formato JSON
-            caracteristicas_json = convertir_caracteristicas_a_json(características)
 
             nuevo_detalle = DetalleTarea(
                 id_detalle_tarea=uuid.uuid4(),
