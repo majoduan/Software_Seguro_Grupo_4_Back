@@ -373,29 +373,32 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
             primera_actividad_procesada = True
             # La primera actividad ya tiene los encabezados en la fila 8, no se repiten
         else:
-            # Las demás actividades se escriben normalmente en su propia fila
+            # Las demás actividades se escriben en la MISMA fila que sus encabezados (como la actividad 1)
             descripcion_real = descripciones_actividades.get(num_actividad, f"Actividad {num_actividad}")
             descripcion_actividad = f"({num_actividad}) {descripcion_real}"
-            worksheet.write(fila_actual, COL_NOMBRE_TAREA, descripcion_actividad, actividad_format)
-            fila_actividad_actual = fila_actual
-            filas_actividades.append(fila_actual)
-            fila_actual += 1
 
-            # IMPORTANTE: Agregar fila de encabezados repetidos para esta actividad
-            # Columnas B-F: encabezados de datos
+            # Escribir actividad en columna A
+            worksheet.write(fila_actual, COL_NOMBRE_TAREA, descripcion_actividad, actividad_format)
+
+            # Escribir encabezados de datos en la MISMA fila (columnas B-F)
             for i, header_text in enumerate(cabecera_datos):
                 col_idx = i + 1  # Empieza en columna B (índice 1)
                 worksheet.write(fila_actual, col_idx, header_text, header_format)
 
-            # Columna G: vacía (se usa para TOTAL POR ACTIVIDAD en la fila de la actividad)
-            # Columnas H-S: encabezados de meses
+            # Columna G: TOTAL POR ACTIVIDAD (se sobrescribirá con fórmula después)
+            worksheet.write_number(fila_actual, COL_TOTAL_POR_ACTIVIDAD, 0, moneda_format)
+
+            # Columnas H-S: encabezados de meses en la MISMA fila
             for i, fecha_obj in enumerate(fechas_excel):
                 col_idx = COL_MESES_INICIO + i
                 worksheet.write_datetime(fila_actual, col_idx, fecha_obj, fecha_header_format)
 
             # Columna T: SUMAN
             worksheet.write(fila_actual, COL_SUMAN, 'SUMAN', header_format)
-            fila_actual += 1
+
+            fila_actividad_actual = fila_actual
+            filas_actividades.append(fila_actual)
+            fila_actual += 1  # Avanzar a la siguiente fila para las tareas
 
         # FILAS DE TAREAS
         fila_inicio_tareas = fila_actual
@@ -421,7 +424,9 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
             celda_cantidad = xl_rowcol_to_cell(fila_actual, COL_CANTIDAD)
             celda_precio = xl_rowcol_to_cell(fila_actual, COL_PRECIO_UNIT)
             formula_total = f"={celda_cantidad}*{celda_precio}"
-            worksheet.write_formula(fila_actual, COL_TOTAL, formula_total, moneda_format)
+            # Calcular valor inicial para que Excel muestre el resultado correctamente
+            valor_total = tarea["cantidad"] * tarea["precio_unitario"]
+            worksheet.write_formula(fila_actual, COL_TOTAL, formula_total, moneda_format, valor_total)
 
             # Columna 6 (G): TOTAL POR ACTIVIDAD - Vacía para tareas (solo en fila de actividad)
             # No se escribe nada aquí
@@ -435,7 +440,9 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
             celda_inicio_meses = xl_rowcol_to_cell(fila_actual, COL_MESES_INICIO)
             celda_fin_meses = xl_rowcol_to_cell(fila_actual, COL_MESES_INICIO + 11)
             formula_suman = f"=SUM({celda_inicio_meses}:{celda_fin_meses})"
-            worksheet.write_formula(fila_actual, COL_SUMAN, formula_suman, moneda_format)
+            # Calcular valor inicial sumando todos los meses
+            valor_suman = sum(prog.get(mes, 0) for mes in meses_orden)
+            worksheet.write_formula(fila_actual, COL_SUMAN, formula_suman, moneda_format, valor_suman)
 
             fila_actual += 1
 
@@ -445,7 +452,9 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
         celda_inicio_totales = xl_rowcol_to_cell(fila_inicio_tareas, COL_TOTAL)
         celda_fin_totales = xl_rowcol_to_cell(fila_fin_tareas, COL_TOTAL)
         formula_total_actividad = f"=SUM({celda_inicio_totales}:{celda_fin_totales})"
-        worksheet.write_formula(fila_actividad_actual, COL_TOTAL_POR_ACTIVIDAD, formula_total_actividad, moneda_actividad_format)
+        # Calcular valor inicial sumando los totales de todas las tareas de esta actividad
+        valor_total_actividad = sum(tarea["cantidad"] * tarea["precio_unitario"] for tarea in tareas_actividad)
+        worksheet.write_formula(fila_actividad_actual, COL_TOTAL_POR_ACTIVIDAD, formula_total_actividad, moneda_actividad_format, valor_total_actividad)
 
     fila_fin_datos = fila_actual - 1
 
@@ -465,26 +474,45 @@ def generar_excel_poa(reporte: list, poa_vacio: bool = False) -> io.BytesIO:
                           total_presupuesto_format)
 
     # FÓRMULA: Suma de todas las columnas de meses
-    for col_idx in range(COL_MESES_INICIO, COL_MESES_INICIO + 12):
+    for i, mes in enumerate(meses_orden):
+        col_idx = COL_MESES_INICIO + i
         celda_inicio = xl_rowcol_to_cell(primera_fila_datos, col_idx)
         celda_fin = xl_rowcol_to_cell(fila_fin_datos, col_idx)
         formula_mes_total = f"=SUM({celda_inicio}:{celda_fin})"
-        worksheet.write_formula(fila_actual, col_idx, formula_mes_total, moneda_total_format)
+        # Calcular valor inicial sumando todos los valores de este mes en todas las tareas
+        valor_mes_total = sum(
+            tarea.get("programacion_mensual", {}).get(mes, 0)
+            for _, tareas in actividades_ordenadas
+            for tarea in tareas
+        )
+        worksheet.write_formula(fila_actual, col_idx, formula_mes_total, moneda_total_format, valor_mes_total)
 
     # FÓRMULA: SUMAN total
     celda_inicio_suman = xl_rowcol_to_cell(primera_fila_datos, COL_SUMAN)
     celda_fin_suman = xl_rowcol_to_cell(fila_fin_datos, COL_SUMAN)
     formula_suman_total = f"=SUM({celda_inicio_suman}:{celda_fin_suman})"
-    worksheet.write_formula(fila_actual, COL_SUMAN, formula_suman_total, moneda_total_format)
+    # Calcular valor inicial sumando todos los valores SUMAN de todas las tareas
+    valor_suman_total = sum(
+        sum(tarea.get("programacion_mensual", {}).get(mes, 0) for mes in meses_orden)
+        for _, tareas in actividades_ordenadas
+        for tarea in tareas
+    )
+    worksheet.write_formula(fila_actual, COL_SUMAN, formula_suman_total, moneda_total_format, valor_suman_total)
 
     # FÓRMULA: TOTAL POR ACTIVIDAD (suma solo de las filas de actividades, no de todas las tareas)
     # Construir fórmula que sume solo las celdas de actividades: =G8+G12+G16 (ejemplo)
     if filas_actividades:
         celdas_actividades = [xl_rowcol_to_cell(fila, COL_TOTAL_POR_ACTIVIDAD) for fila in filas_actividades]
         formula_total_presupuesto = f"={'+'.join(celdas_actividades)}"
+        # Calcular valor inicial sumando los totales de todas las actividades
+        valor_total_presupuesto = sum(
+            sum(tarea["cantidad"] * tarea["precio_unitario"] for tarea in tareas)
+            for _, tareas in actividades_ordenadas
+        )
     else:
         formula_total_presupuesto = "=0"
-    worksheet.write_formula(fila_actual, COL_TOTAL_POR_ACTIVIDAD, formula_total_presupuesto, moneda_total_format)
+        valor_total_presupuesto = 0
+    worksheet.write_formula(fila_actual, COL_TOTAL_POR_ACTIVIDAD, formula_total_presupuesto, moneda_total_format, valor_total_presupuesto)
 
     fila_actual += 1
 
