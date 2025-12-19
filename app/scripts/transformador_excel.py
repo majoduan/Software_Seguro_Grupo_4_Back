@@ -152,12 +152,11 @@ def transformar_excel(file_bytes: bytes, hoja: str):
             precio_val = float(precio)
         except (ValueError, TypeError):
             raise ValueError(f"Error en la fila {i+1}: valor no válido en {chr(65 + col_precio)}{i+1} (se esperaba un número).")
-        if pd.isna(item_presupuestario):
-            raise ValueError(f"Error en la fila {i+1}: No puede estar vacia la celda {chr(65 + col_item)}{i+1} (se esperaba el item presupuestario).")
-        try:
-            item_presupuestario_val = int(item_presupuestario)
-        except (ValueError, TypeError):
-            raise ValueError(f"Error en la fila {i+1}: valor no válido en {chr(65 + col_item)}{i+1} (se esperaba el item presupuestario).")
+        # Permitir que el item presupuestario esté vacío; usar '00000' por defecto
+        if pd.isna(item_presupuestario) or str(item_presupuestario).strip() == "":
+            item_presupuestario_str = "00000"
+        else:
+            item_presupuestario_str = str(item_presupuestario).strip()
         # Armamos programación ejecución
         programacion = {}
         for idx, col_idx in enumerate(fecha_indices):

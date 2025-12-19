@@ -2632,43 +2632,32 @@ async def transformar_archivo_excel(
                 items_presupuestarios = result.scalars().all()
 
                 if not items_presupuestarios:
-                    # Eliminar todo lo subido y lanzar excepción
-                    await eliminar_tareas_y_actividades(id_poa, db)
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"No se guardo nada en la base de datos debido a que: \nNo se encontró el item presupuestario con código '{tarea['item_presupuestario']}' y descripción '{nombre_sin_prefijo}'"
+                    # No abortar: registrar advertencia y continuar sin detalle
+                    errores.append(
+                        f"No se encontró el item presupuestario '{tarea['item_presupuestario']}' para la tarea '{nombre_sin_prefijo}'. Se creará sin detalle."
                     )
-                nombre_normalizado = normalizar_texto(nombre_sin_prefijo)
-                encontrado = False
-                for item in items_presupuestarios:
-                     # Trae todos los detalles de tarea para ese item
-                    result = await db.execute(
-                        select(models.DetalleTarea).where(
-                            models.DetalleTarea.id_item_presupuestario == item.id_item_presupuestario
+                else:
+                    nombre_normalizado = normalizar_texto(nombre_sin_prefijo)
+                    encontrado = False
+                    for item in items_presupuestarios:
+                        result = await db.execute(
+                            select(models.DetalleTarea).where(
+                                models.DetalleTarea.id_item_presupuestario == item.id_item_presupuestario
+                            )
                         )
-                    )
-                    detalles_tarea = result.scalars().all()
-                    # Normaliza y compara en Python
-                    for detalle in detalles_tarea:
-                        
-                        nombre_bd = normalizar_texto(detalle.nombre)
-                        if nombre_bd == nombre_normalizado:
-                            id_detalle_tarea = detalle.id_detalle_tarea
-                            encontrado = True
+                        detalles_tarea = result.scalars().all()
+                        for detalle in detalles_tarea:
+                            nombre_bd = normalizar_texto(detalle.nombre)
+                            if nombre_bd == nombre_normalizado:
+                                id_detalle_tarea = detalle.id_detalle_tarea
+                                encontrado = True
+                                break
+                        if encontrado:
                             break
-                        else:
-                            continue  # Sigue con el siguiente item si no encontró
-                    if encontrado:
-                        break
-                if not encontrado:  # Si no encontró ningún detalle de tarea
-                    await eliminar_tareas_y_actividades(id_poa, db)
-                    db.add(log_elim)
-                    await db.commit()
-
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"No se guardo nada en la base de datos debido a que: \nNo se encontró detalle de tarea para el item presupuestario '{tarea['item_presupuestario']}' y descripción '{nombre_sin_prefijo}'"
-                    )
+                    if not encontrado:
+                        errores.append(
+                            f"No se encontró detalle de tarea para el item '{tarea['item_presupuestario']}' y descripción '{nombre_sin_prefijo}'. Se creará sin detalle."
+                        )
                # Crear la tarea
                 nueva_tarea = models.Tarea(
                     id_tarea=uuid.uuid4(),
