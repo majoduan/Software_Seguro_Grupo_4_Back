@@ -942,17 +942,9 @@ async def crear_actividades_para_poa(
     total_actividades = suma_existente + suma_nuevas
     presupuesto_poa = float(poa.presupuesto_asignado)
 
-    if total_actividades > presupuesto_poa:
-        diferencia = total_actividades - presupuesto_poa
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"La suma de actividades (${total_actividades:,.2f}) excedería "
-                f"el presupuesto asignado al POA (${presupuesto_poa:,.2f}). "
-                f"Diferencia: ${diferencia:,.2f}. "
-                f"Presupuesto disponible: ${presupuesto_poa - suma_existente:,.2f}"
-            )
-        )
+    # Verificar si excede el presupuesto (solo warning, no bloqueo)
+    excede_presupuesto = total_actividades > presupuesto_poa
+    diferencia_presupuesto = total_actividades - presupuesto_poa if excede_presupuesto else 0
 
     actividades = [
         models.Actividad(
@@ -970,12 +962,24 @@ async def crear_actividades_para_poa(
 
     ids_creados = [str(act.id_actividad) for act in actividades]
 
+    response_content = {
+        "msg": f"{len(actividades)} actividades creadas correctamente",
+        "ids_actividades": ids_creados,
+    }
+
+    # Agregar warning si excede el presupuesto
+    if excede_presupuesto:
+        response_content["warning"] = {
+            "excede_presupuesto": True,
+            "mensaje": f"El total de actividades (${total_actividades:,.2f}) excede el presupuesto asignado al POA (${presupuesto_poa:,.2f})",
+            "diferencia": float(diferencia_presupuesto),
+            "total_actividades": total_actividades,
+            "presupuesto_poa": presupuesto_poa
+        }
+
     return JSONResponse(
         status_code=201,
-        content={
-            "msg": f"{len(actividades)} actividades creadas correctamente",
-            "ids_actividades": ids_creados,
-        }
+        content=response_content
     )
 
 
@@ -2560,12 +2564,9 @@ async def transformar_archivo_excel(
             for actividad in json_result["actividades"]
         )
 
-        # Validar que no exceda el presupuesto asignado al POA
-        if presupuesto_total_excel > float(poa.presupuesto_asignado):
-            raise HTTPException(
-                status_code=400,
-                detail=f"El presupuesto total del archivo Excel (${presupuesto_total_excel:,.2f}) excede el presupuesto asignado al POA (${float(poa.presupuesto_asignado):,.2f}). Diferencia: ${(presupuesto_total_excel - float(poa.presupuesto_asignado)):,.2f}"
-            )
+        # Verificar si excede el presupuesto asignado al POA (solo warning, no bloqueo)
+        excede_presupuesto = presupuesto_total_excel > float(poa.presupuesto_asignado)
+        diferencia_presupuesto = presupuesto_total_excel - float(poa.presupuesto_asignado) if excede_presupuesto else 0
 
         if actividades_existentes:
             if not confirmacion:
@@ -2631,43 +2632,32 @@ async def transformar_archivo_excel(
                 items_presupuestarios = result.scalars().all()
 
                 if not items_presupuestarios:
-                    # Eliminar todo lo subido y lanzar excepción
-                    await eliminar_tareas_y_actividades(id_poa, db)
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"No se guardo nada en la base de datos debido a que: \nNo se encontró el item presupuestario con código '{tarea['item_presupuestario']}' y descripción '{nombre_sin_prefijo}'"
+                    # No abortar: registrar advertencia y continuar sin detalle
+                    errores.append(
+                        f"No se encontró el item presupuestario '{tarea['item_presupuestario']}' para la tarea '{nombre_sin_prefijo}'. Se creará sin detalle."
                     )
-                nombre_normalizado = normalizar_texto(nombre_sin_prefijo)
-                encontrado = False
-                for item in items_presupuestarios:
-                     # Trae todos los detalles de tarea para ese item
-                    result = await db.execute(
-                        select(models.DetalleTarea).where(
-                            models.DetalleTarea.id_item_presupuestario == item.id_item_presupuestario
+                else:
+                    nombre_normalizado = normalizar_texto(nombre_sin_prefijo)
+                    encontrado = False
+                    for item in items_presupuestarios:
+                        result = await db.execute(
+                            select(models.DetalleTarea).where(
+                                models.DetalleTarea.id_item_presupuestario == item.id_item_presupuestario
+                            )
                         )
-                    )
-                    detalles_tarea = result.scalars().all()
-                    # Normaliza y compara en Python
-                    for detalle in detalles_tarea:
-                        
-                        nombre_bd = normalizar_texto(detalle.nombre)
-                        if nombre_bd == nombre_normalizado:
-                            id_detalle_tarea = detalle.id_detalle_tarea
-                            encontrado = True
+                        detalles_tarea = result.scalars().all()
+                        for detalle in detalles_tarea:
+                            nombre_bd = normalizar_texto(detalle.nombre)
+                            if nombre_bd == nombre_normalizado:
+                                id_detalle_tarea = detalle.id_detalle_tarea
+                                encontrado = True
+                                break
+                        if encontrado:
                             break
-                        else:
-                            continue  # Sigue con el siguiente item si no encontró
-                    if encontrado:
-                        break
-                if not encontrado:  # Si no encontró ningún detalle de tarea
-                    await eliminar_tareas_y_actividades(id_poa, db)
-                    db.add(log_elim)
-                    await db.commit()
-
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"No se guardo nada en la base de datos debido a que: \nNo se encontró detalle de tarea para el item presupuestario '{tarea['item_presupuestario']}' y descripción '{nombre_sin_prefijo}'"
-                    )
+                    if not encontrado:
+                        errores.append(
+                            f"No se encontró detalle de tarea para el item '{tarea['item_presupuestario']}' y descripción '{nombre_sin_prefijo}'. Se creará sin detalle."
+                        )
                # Crear la tarea
                 nueva_tarea = models.Tarea(
                     id_tarea=uuid.uuid4(),
@@ -2760,13 +2750,27 @@ async def transformar_archivo_excel(
         await db.commit()
         
         # Retornar el resultado
-        if errores:
-            return {
-                "message": "Actividades y tareas creadas con advertencias",
-                "errores": errores,
+        response_data = {}
+
+        if excede_presupuesto:
+            response_data = {
+                "message": "Actividades y tareas creadas exitosamente",
+                "warning": {
+                    "excede_presupuesto": True,
+                    "mensaje": f"El presupuesto total de las actividades (${presupuesto_total_excel:,.2f}) excede el presupuesto asignado al POA (${float(poa.presupuesto_asignado):,.2f})",
+                    "diferencia": float(diferencia_presupuesto),
+                    "presupuesto_excel": presupuesto_total_excel,
+                    "presupuesto_poa": float(poa.presupuesto_asignado)
+                }
             }
         else:
-            return {"message": "Actividades y tareas creadas exitosamente"}
+            response_data = {"message": "Actividades y tareas creadas exitosamente"}
+
+        if errores:
+            response_data["errores"] = errores
+            response_data["message"] = "Actividades y tareas creadas con advertencias"
+
+        return response_data
     except ValueError as e:
         # Capturar errores de formato y lanzar una excepción HTTP
         raise HTTPException(status_code=400, detail=str(e))

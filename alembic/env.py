@@ -1,5 +1,5 @@
 from logging.config import fileConfig
-from sqlalchemy import engine_from_config, pool, create_engine
+from sqlalchemy import engine_from_config, pool, create_engine, text
 from alembic import context
 from dotenv import load_dotenv
 import os
@@ -82,6 +82,7 @@ def run_migrations_offline():
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        version_table_schema="public",
     )
 
     with context.begin_transaction():
@@ -93,9 +94,13 @@ def run_migrations_online():
     connectable = create_engine(url, poolclass=pool.NullPool)
 
     with connectable.connect() as connection:
+        connection.execute(text("SET search_path TO public"))
+        connection.commit()
+        
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
+            version_table_schema="public",
         )
 
         with context.begin_transaction():
