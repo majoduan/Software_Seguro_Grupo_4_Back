@@ -9,9 +9,11 @@ que requieren consultas a la base de datos).
 from decimal import Decimal
 from datetime import date
 from typing import Optional
+from uuid import UUID
 from dateutil.relativedelta import relativedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import func
 from fastapi import HTTPException
 
 from app import models
@@ -455,4 +457,73 @@ async def validate_programacion_mensual_business_rules(
         raise HTTPException(
             status_code=404,
             detail="Tarea no encontrada"
+        )
+
+
+async def validate_departamento_unique(
+    db: AsyncSession,
+    nombre: str,
+    departamento_id: Optional[UUID] = None
+) -> None:
+    """
+    Valida que el nombre del departamento sea único.
+
+    Args:
+        db: Sesión de base de datos
+        nombre: Nombre del departamento a validar
+        departamento_id: ID del departamento (None para creación, UUID para edición)
+
+    Raises:
+        HTTPException: 400 si ya existe un departamento con ese nombre
+    """
+    # Normalizar para comparación (quitar espacios extras y convertir a mayúsculas)
+    nombre_normalizado = ' '.join(nombre.split()).upper()
+
+    query = select(models.Departamento).where(
+        func.upper(func.regexp_replace(models.Departamento.nombre, r'\s+', ' ', 'g')) == nombre_normalizado
+    )
+
+    # Si estamos editando, excluir el departamento actual
+    if departamento_id:
+        query = query.where(models.Departamento.id_departamento != departamento_id)
+
+    result = await db.execute(query)
+    departamento_existente = result.scalars().first()
+
+    if departamento_existente:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ya existe un departamento con el nombre '{nombre}'"
+        )
+
+
+async def validate_departamento_can_delete(
+    db: AsyncSession,
+    departamento_id: UUID
+) -> None:
+    """
+    Valida que un departamento pueda ser eliminado.
+
+    Un departamento NO puede eliminarse si tiene proyectos asociados.
+
+    Args:
+        db: Sesión de base de datos
+        departamento_id: ID del departamento a eliminar
+
+    Raises:
+        HTTPException: 400 si el departamento tiene proyectos asociados
+    """
+    # Verificar si existen proyectos asociados
+    query = select(func.count(models.Proyecto.id_proyecto)).where(
+        models.Proyecto.id_departamento == departamento_id
+    )
+
+    result = await db.execute(query)
+    count = result.scalar()
+
+    if count > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No se puede eliminar el departamento porque tiene {count} proyecto(s) asociado(s). "
+                   f"Reasigne o elimine los proyectos primero."
         )

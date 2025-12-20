@@ -326,6 +326,60 @@ class EstadoProyectoOut(BaseModel):
     class Config:
         from_attributes = True
 
+class DepartamentoCreate(BaseModel):
+    """
+    Schema para crear un nuevo departamento
+
+    Validaciones:
+    - nombre: 3-100 caracteres, no vacío
+    - descripcion: opcional, máximo 500 caracteres
+    """
+    nombre: constr(min_length=3, max_length=100, strip_whitespace=True)
+    descripcion: Optional[constr(max_length=500, strip_whitespace=True)] = None
+
+    @field_validator('nombre')
+    @classmethod
+    def validate_nombre(cls, v):
+        if not v or not v.strip():
+            raise ValueError("El nombre del departamento no puede estar vacío")
+        # Normalizar espacios múltiples
+        v = ' '.join(v.split())
+        return v
+
+    @field_validator('descripcion', mode='before')
+    @classmethod
+    def validate_descripcion(cls, v):
+        if v and not v.strip():
+            return None
+        return v
+
+
+class DepartamentoUpdate(BaseModel):
+    """
+    Schema para actualizar un departamento existente
+
+    Nota: Los campos son opcionales para permitir actualizaciones parciales
+    """
+    nombre: Optional[constr(min_length=3, max_length=100, strip_whitespace=True)] = None
+    descripcion: Optional[constr(max_length=500, strip_whitespace=True)] = None
+
+    @field_validator('nombre')
+    @classmethod
+    def validate_nombre(cls, v):
+        if v is not None:
+            if not v.strip():
+                raise ValueError("El nombre del departamento no puede estar vacío")
+            v = ' '.join(v.split())
+        return v
+
+    @field_validator('descripcion', mode='before')
+    @classmethod
+    def validate_descripcion(cls, v):
+        if v and not v.strip():
+            return None
+        return v
+
+
 class DepartamentoOut(BaseModel):
     id_departamento: UUID
     nombre: str

@@ -16,7 +16,9 @@ from app.business_validators import (
     validate_periodo_business_rules,
     validate_tarea_business_rules,
     validate_usuario_business_rules,
-    validate_programacion_mensual_business_rules
+    validate_programacion_mensual_business_rules,
+    validate_departamento_unique,
+    validate_departamento_can_delete
 )
 from passlib.context import CryptContext
 import uuid
@@ -904,10 +906,230 @@ async def listar_estados_proyecto(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(models.EstadoProyecto))
     return result.scalars().all()
 
+# ============================================================================
+# CRUD COMPLETO DE DEPARTAMENTOS
+# ============================================================================
+
 @app.get("/departamentos/", response_model=List[schemas.DepartamentoOut])
 async def listar_departamentos(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.Departamento))
+    """
+    Lista todos los departamentos.
+
+    Endpoint público (no requiere autenticación para permitir uso en dropdowns).
+    """
+    result = await db.execute(select(models.Departamento).order_by(models.Departamento.nombre))
     return result.scalars().all()
+
+
+@app.get("/departamentos/{id_departamento}", response_model=schemas.DepartamentoOut)
+async def obtener_departamento(
+    id_departamento: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    """
+    Obtiene un departamento por ID.
+
+    Args:
+        id_departamento: UUID del departamento
+
+    Returns:
+        DepartamentoOut: Información del departamento
+
+    Raises:
+        HTTPException: 404 si el departamento no existe
+    """
+    result = await db.execute(
+        select(models.Departamento).where(models.Departamento.id_departamento == id_departamento)
+    )
+    departamento = result.scalars().first()
+
+    if not departamento:
+        raise HTTPException(status_code=404, detail="Departamento no encontrado")
+
+    return departamento
+
+
+@app.post("/departamentos/", response_model=schemas.DepartamentoOut, status_code=201)
+async def crear_departamento(
+    data: schemas.DepartamentoCreate,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    """
+    Crea un nuevo departamento.
+
+    Permisos:
+        Solo usuarios con rol ADMINISTRADOR pueden crear departamentos.
+
+    Validaciones:
+        - Nombre único (case-insensitive, ignora espacios múltiples)
+        - Nombre: 3-100 caracteres
+        - Descripción: máximo 500 caracteres
+
+    Args:
+        data: Datos del departamento a crear
+
+    Returns:
+        DepartamentoOut: Departamento creado
+
+    Raises:
+        HTTPException: 403 si el usuario no es ADMINISTRADOR
+        HTTPException: 400 si el nombre ya existe
+    """
+    # Verificar rol de administrador
+    result_rol = await db.execute(
+        select(models.Rol).where(models.Rol.id_rol == usuario.id_rol)
+    )
+    rol = result_rol.scalars().first()
+
+    if not rol or rol.nombre_rol != "Administrador":
+        raise HTTPException(
+            status_code=403,
+            detail="Solo los administradores pueden crear departamentos"
+        )
+
+    # Validar unicidad del nombre
+    await validate_departamento_unique(db, data.nombre)
+
+    # Crear departamento
+    nuevo_departamento = models.Departamento(
+        id_departamento=uuid.uuid4(),
+        nombre=data.nombre,
+        descripcion=data.descripcion
+    )
+
+    db.add(nuevo_departamento)
+    await db.commit()
+    await db.refresh(nuevo_departamento)
+
+    return nuevo_departamento
+
+
+@app.put("/departamentos/{id_departamento}", response_model=schemas.DepartamentoOut)
+async def actualizar_departamento(
+    id_departamento: uuid.UUID,
+    data: schemas.DepartamentoUpdate,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    """
+    Actualiza un departamento existente.
+
+    Permisos:
+        Solo usuarios con rol ADMINISTRADOR pueden actualizar departamentos.
+
+    Validaciones:
+        - Departamento debe existir
+        - Si se cambia el nombre, debe ser único
+        - Nombre: 3-100 caracteres
+        - Descripción: máximo 500 caracteres
+
+    Args:
+        id_departamento: UUID del departamento a actualizar
+        data: Datos a actualizar (campos opcionales)
+
+    Returns:
+        DepartamentoOut: Departamento actualizado
+
+    Raises:
+        HTTPException: 403 si el usuario no es ADMINISTRADOR
+        HTTPException: 404 si el departamento no existe
+        HTTPException: 400 si el nuevo nombre ya existe
+    """
+    # Verificar rol de administrador
+    result_rol = await db.execute(
+        select(models.Rol).where(models.Rol.id_rol == usuario.id_rol)
+    )
+    rol = result_rol.scalars().first()
+
+    if not rol or rol.nombre_rol != "Administrador":
+        raise HTTPException(
+            status_code=403,
+            detail="Solo los administradores pueden actualizar departamentos"
+        )
+
+    # Verificar existencia del departamento
+    result = await db.execute(
+        select(models.Departamento).where(models.Departamento.id_departamento == id_departamento)
+    )
+    departamento = result.scalars().first()
+
+    if not departamento:
+        raise HTTPException(status_code=404, detail="Departamento no encontrado")
+
+    # Validar unicidad del nombre si se está actualizando
+    if data.nombre:
+        await validate_departamento_unique(db, data.nombre, id_departamento)
+        departamento.nombre = data.nombre
+
+    # Actualizar descripción si se proporciona
+    if data.descripcion is not None:
+        departamento.descripcion = data.descripcion
+
+    await db.commit()
+    await db.refresh(departamento)
+
+    return departamento
+
+
+@app.delete("/departamentos/{id_departamento}", status_code=204)
+async def eliminar_departamento(
+    id_departamento: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    """
+    Elimina un departamento.
+
+    Permisos:
+        Solo usuarios con rol ADMINISTRADOR pueden eliminar departamentos.
+
+    Validaciones:
+        - Departamento debe existir
+        - Departamento no debe tener proyectos asociados
+
+    Args:
+        id_departamento: UUID del departamento a eliminar
+
+    Returns:
+        204 No Content si se eliminó correctamente
+
+    Raises:
+        HTTPException: 403 si el usuario no es ADMINISTRADOR
+        HTTPException: 404 si el departamento no existe
+        HTTPException: 400 si el departamento tiene proyectos asociados
+    """
+    # Verificar rol de administrador
+    result_rol = await db.execute(
+        select(models.Rol).where(models.Rol.id_rol == usuario.id_rol)
+    )
+    rol = result_rol.scalars().first()
+
+    if not rol or rol.nombre_rol != "Administrador":
+        raise HTTPException(
+            status_code=403,
+            detail="Solo los administradores pueden eliminar departamentos"
+        )
+
+    # Verificar existencia del departamento
+    result = await db.execute(
+        select(models.Departamento).where(models.Departamento.id_departamento == id_departamento)
+    )
+    departamento = result.scalars().first()
+
+    if not departamento:
+        raise HTTPException(status_code=404, detail="Departamento no encontrado")
+
+    # Validar que no tenga proyectos asociados
+    await validate_departamento_can_delete(db, id_departamento)
+
+    # Eliminar departamento
+    await db.delete(departamento)
+    await db.commit()
+
+    # 204 No Content no retorna body
+    return None
 
 #actividades
 @app.post("/poas/{id_poa}/actividades")
