@@ -600,39 +600,47 @@ async def editar_poa(
         "id_tipo_poa", "id_estado_poa", "anio_ejecucion", "presupuesto_asignado"
     ]
     
-    for campo in campos_auditar:
-        if not hasattr(data, campo):
-            continue
-        
-        valor_anterior = getattr(poa, campo)
-        valor_nuevo = getattr(data, campo)
-        
-        if valor_anterior != valor_nuevo:
-            historico = models.HistoricoPoa(
-                id_historico=uuid.uuid4(),
-                id_poa=poa.id_poa,
-                id_usuario=usuario.id_usuario,
-                fecha_modificacion=datetime.now(timezone.utc),
-                campo_modificado=campo,
-                valor_anterior=str(valor_anterior) if valor_anterior is not None else "",
-                valor_nuevo=str(valor_nuevo) if valor_nuevo is not None else "",
-                justificacion=justificacion.strip()
-            )
-            db.add(historico)
+    try:
+        for campo in campos_auditar:
+            if not hasattr(data, campo):
+                continue
+            
+            valor_anterior = getattr(poa, campo)
+            valor_nuevo = getattr(data, campo)
+            
+            if valor_anterior != valor_nuevo:
+                historico = models.HistoricoPoa(
+                    id_historico=uuid.uuid4(),
+                    id_poa=poa.id_poa,
+                    id_usuario=usuario.id_usuario,
+                    fecha_modificacion=datetime.now(),  # Usar datetime naive
+                    campo_modificado=campo,
+                    valor_anterior=str(valor_anterior) if valor_anterior is not None else "",
+                    valor_nuevo=str(valor_nuevo) if valor_nuevo is not None else "",
+                    justificacion=justificacion.strip()
+                )
+                db.add(historico)
 
-    # Actualizar el POA
-    poa.id_proyecto = data.id_proyecto
-    poa.id_periodo = data.id_periodo
-    poa.codigo_poa = data.codigo_poa
-    poa.fecha_creacion = data.fecha_creacion
-    poa.id_tipo_poa = data.id_tipo_poa
-    poa.id_estado_poa = data.id_estado_poa  # o mantener el actual si no deseas sobreescribir
-    poa.anio_ejecucion = data.anio_ejecucion
-    poa.presupuesto_asignado = data.presupuesto_asignado
+        # Actualizar el POA
+        poa.id_proyecto = data.id_proyecto
+        poa.id_periodo = data.id_periodo
+        poa.codigo_poa = data.codigo_poa
+        poa.fecha_creacion = data.fecha_creacion
+        poa.id_tipo_poa = data.id_tipo_poa
+        poa.id_estado_poa = data.id_estado_poa
+        poa.anio_ejecucion = data.anio_ejecucion
+        poa.presupuesto_asignado = data.presupuesto_asignado
 
-    await db.commit()
-    await db.refresh(poa)
-    return poa
+        await db.commit()
+        await db.refresh(poa)
+        return poa
+    except Exception as e:
+        await db.rollback()
+        print(f"DEBUG - Error al editar POA: {str(e)}") # Log en Render
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error al actualizar el POA: {str(e)}"
+        )
 
 @app.get("/poas/", response_model=List[schemas.PoaOut])
 async def listar_poas(
@@ -780,63 +788,63 @@ async def editar_proyecto(
     - Validaciones de business rules (permite mismo código si es el mismo proyecto)
     - Justificación obligatoria (10-500 caracteres)
     """
+    # Extraer justificación del body
+    justificacion = body.get('justificacion', '')
+    if not justificacion or len(justificacion.strip()) < 10:
+        raise HTTPException(
+            status_code=400, 
+            detail="La justificación es obligatoria y debe tener al menos 10 caracteres"
+        )
+    if len(justificacion) > 500:
+        raise HTTPException(
+            status_code=400,
+            detail="La justificación no puede exceder 500 caracteres"
+        )
+    
+    # Crear objeto ProyectoCreate sin la justificación
+    proyecto_data = {k: v for k, v in body.items() if k != 'justificacion'}
+    data = schemas.ProyectoCreate(**proyecto_data)
+    
+    result = await db.execute(select(models.Proyecto).where(models.Proyecto.id_proyecto == id))
+    proyecto = result.scalars().first()
+
+    if not proyecto:
+        raise HTTPException(status_code=404, detail="Proyecto no encontrado")
+
+    # Validar todas las reglas de negocio (pasando el ID para excluir en validación de código único)
+    await validate_proyecto_business_rules(db, data, proyecto_id=str(id))
+
+    # Validar tipo y estado (redundante pero mantenido para compatibilidad)
+    tipo = await db.execute(select(models.TipoProyecto).where(models.TipoProyecto.id_tipo_proyecto == data.id_tipo_proyecto))
+    if not tipo.scalars().first():
+        raise HTTPException(status_code=404, detail="Tipo de proyecto no encontrado")
+
+    estado = await db.execute(select(models.EstadoProyecto).where(models.EstadoProyecto.id_estado_proyecto == data.id_estado_proyecto))
+    if not estado.scalars().first():
+        raise HTTPException(status_code=404, detail="Estado de proyecto no encontrado")
+
+    # Campos a auditar
+    campos_auditar = [
+        "codigo_proyecto", "titulo", "id_tipo_proyecto", "id_estado_proyecto",
+        "id_departamento", "fecha_creacion", "fecha_inicio", "fecha_fin", "fecha_prorroga",
+        "fecha_prorroga_inicio", "fecha_prorroga_fin", "presupuesto_aprobado",
+        "id_director_proyecto"
+    ]
+
     try:
-        # Extraer justificación del body
-        justificacion = body.get('justificacion', '')
-        if not justificacion or len(justificacion.strip()) < 10:
-            raise HTTPException(
-                status_code=400, 
-                detail="La justificación es obligatoria y debe tener al menos 10 caracteres"
-            )
-        if len(justificacion) > 500:
-            raise HTTPException(
-                status_code=400,
-                detail="La justificación no puede exceder 500 caracteres"
-            )
-        
-        # Crear objeto ProyectoCreate sin la justificación
-        proyecto_data = {k: v for k, v in body.items() if k != 'justificacion'}
-        data = schemas.ProyectoCreate(**proyecto_data)
-        
-        result = await db.execute(select(models.Proyecto).where(models.Proyecto.id_proyecto == id))
-        proyecto = result.scalars().first()
-
-        if not proyecto:
-            raise HTTPException(status_code=404, detail="Proyecto no encontrado")
-
-        # Validar todas las reglas de negocio (pasando el ID para excluir en validación de código único)
-        await validate_proyecto_business_rules(db, data, proyecto_id=str(id))
-
-        # Validar tipo y estado (redundante pero mantenido para compatibilidad)
-        tipo = await db.execute(select(models.TipoProyecto).where(models.TipoProyecto.id_tipo_proyecto == data.id_tipo_proyecto))
-        if not tipo.scalars().first():
-            raise HTTPException(status_code=404, detail="Tipo de proyecto no encontrado")
- 
-        estado = await db.execute(select(models.EstadoProyecto).where(models.EstadoProyecto.id_estado_proyecto == data.id_estado_proyecto))
-        if not estado.scalars().first():
-            raise HTTPException(status_code=404, detail="Estado de proyecto no encontrado")
- 
-        # Campos a auditar
-        campos_auditar = [
-            "codigo_proyecto", "titulo", "id_tipo_proyecto", "id_estado_proyecto",
-            "id_departamento", "fecha_creacion", "fecha_inicio", "fecha_fin", "fecha_prorroga",
-            "fecha_prorroga_inicio", "fecha_prorroga_fin", "presupuesto_aprobado",
-            "id_director_proyecto"
-        ]
- 
         for campo in campos_auditar:
             if not hasattr(data, campo):
                 continue
- 
+
             valor_anterior = getattr(proyecto, campo)
             valor_nuevo = getattr(data, campo)
- 
+
             if valor_anterior != valor_nuevo:
                 historico = models.HistoricoProyecto(
                     id_historico=uuid.uuid4(),
                     id_proyecto=proyecto.id_proyecto,
                     id_usuario=usuario.id_usuario,
-                    fecha_modificacion=datetime.now(timezone.utc),
+                    fecha_modificacion=datetime.now(),  # Usar datetime naive
                     campo_modificado=campo,
                     valor_anterior=str(valor_anterior) if valor_anterior is not None else "",
                     valor_nuevo=str(valor_nuevo) if valor_nuevo is not None else "",
@@ -844,13 +852,17 @@ async def editar_proyecto(
                 )
                 db.add(historico)
                 setattr(proyecto, campo, valor_nuevo)
- 
+
         await db.commit()
         await db.refresh(proyecto)
         return proyecto
     except Exception as e:
         await db.rollback()
-        raise HTTPException(status_code=500, detail="Error interno al editar el proyecto")
+        print(f"DEBUG - Error al editar proyecto: {str(e)}") # Log en Render
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Error al actualizar el proyecto: {str(e)}"
+        )
 
 
 
