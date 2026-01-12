@@ -217,7 +217,7 @@ class ProyectoCreate(BaseModel):
     - fechas de prórroga coherentes
     """
     codigo_proyecto: constr(min_length=5, max_length=50, strip_whitespace=True)
-    titulo: constr(min_length=10, max_length=100, strip_whitespace=True)
+    titulo: constr(min_length=10, max_length=300, strip_whitespace=True)
     id_tipo_proyecto: UUID
     id_estado_proyecto: UUID
     id_departamento: Optional[UUID] = None
