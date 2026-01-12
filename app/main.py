@@ -487,8 +487,7 @@ from dateutil.relativedelta import relativedelta
 @app.put("/poas/{id}", response_model=schemas.PoaOut)
 async def editar_poa(
     id: uuid.UUID,
-    data: schemas.PoaCreate,
-    justificacion: str = Body(..., min_length=10, max_length=500),
+    body: dict = Body(...),
     db: AsyncSession = Depends(get_db),
     usuario: models.Usuario = Depends(get_current_user)
 ):
@@ -500,6 +499,23 @@ async def editar_poa(
     - Validaciones de business rules
     - Justificación obligatoria (10-500 caracteres)
     """
+    # Extraer justificación del body
+    justificacion = body.get('justificacion', '')
+    if not justificacion or len(justificacion.strip()) < 10:
+        raise HTTPException(
+            status_code=400,
+            detail="La justificación es obligatoria y debe tener al menos 10 caracteres"
+        )
+    if len(justificacion) > 500:
+        raise HTTPException(
+            status_code=400,
+            detail="La justificación no puede exceder 500 caracteres"
+        )
+    
+    # Crear objeto PoaCreate sin la justificación
+    poa_data = {k: v for k, v in body.items() if k != 'justificacion'}
+    data = schemas.PoaCreate(**poa_data)
+    
     # Verificar que el POA exista
     result = await db.execute(select(models.Poa).where(models.Poa.id_poa == id))
     poa = result.scalars().first()
@@ -600,7 +616,7 @@ async def editar_poa(
                 campo_modificado=campo,
                 valor_anterior=str(valor_anterior) if valor_anterior is not None else "",
                 valor_nuevo=str(valor_nuevo) if valor_nuevo is not None else "",
-                justificacion=justificacion
+                justificacion=justificacion.strip()
             )
             db.add(historico)
 
@@ -752,8 +768,7 @@ async def crear_proyecto(
 @app.put("/proyectos/{id}", response_model=schemas.ProyectoOut)
 async def editar_proyecto(
     id: uuid.UUID,
-    data: schemas.ProyectoCreate,
-    justificacion: str = Body(..., min_length=10, max_length=500),
+    body: dict = Body(...),
     db: AsyncSession = Depends(get_db),
     usuario: models.Usuario = Depends(get_current_user)
 ):
@@ -766,6 +781,23 @@ async def editar_proyecto(
     - Justificación obligatoria (10-500 caracteres)
     """
     try:
+        # Extraer justificación del body
+        justificacion = body.get('justificacion', '')
+        if not justificacion or len(justificacion.strip()) < 10:
+            raise HTTPException(
+                status_code=400, 
+                detail="La justificación es obligatoria y debe tener al menos 10 caracteres"
+            )
+        if len(justificacion) > 500:
+            raise HTTPException(
+                status_code=400,
+                detail="La justificación no puede exceder 500 caracteres"
+            )
+        
+        # Crear objeto ProyectoCreate sin la justificación
+        proyecto_data = {k: v for k, v in body.items() if k != 'justificacion'}
+        data = schemas.ProyectoCreate(**proyecto_data)
+        
         result = await db.execute(select(models.Proyecto).where(models.Proyecto.id_proyecto == id))
         proyecto = result.scalars().first()
 
@@ -808,7 +840,7 @@ async def editar_proyecto(
                     campo_modificado=campo,
                     valor_anterior=str(valor_anterior) if valor_anterior is not None else "",
                     valor_nuevo=str(valor_nuevo) if valor_nuevo is not None else "",
-                    justificacion=justificacion
+                    justificacion=justificacion.strip()
                 )
                 db.add(historico)
                 setattr(proyecto, campo, valor_nuevo)
