@@ -609,14 +609,40 @@ async def editar_poa(
             valor_nuevo = getattr(data, campo)
             
             if valor_anterior != valor_nuevo:
+                # Resolución de nombres para campos de ID en POA
+                v_ant_str = str(valor_anterior) if valor_anterior is not None else "N/A"
+                v_nue_str = str(valor_nuevo) if valor_nuevo is not None else "N/A"
+
+                if campo == "id_proyecto":
+                    obj_ant = await db.get(models.Proyecto, valor_anterior) if valor_anterior else None
+                    obj_nue = await db.get(models.Proyecto, valor_nuevo) if valor_nuevo else None
+                    v_ant_str = obj_ant.codigo_proyecto if obj_ant else v_ant_str
+                    v_nue_str = obj_nue.codigo_proyecto if obj_nue else v_nue_str
+                elif campo == "id_periodo":
+                    obj_ant = await db.get(models.Periodo, valor_anterior) if valor_anterior else None
+                    obj_nue = await db.get(models.Periodo, valor_nuevo) if valor_nuevo else None
+                    v_ant_str = obj_ant.nombre_periodo if obj_ant else v_ant_str
+                    v_nue_str = obj_nue.nombre_periodo if obj_nue else v_nue_str
+                elif campo == "id_tipo_poa":
+                    obj_ant = await db.get(models.TipoPOA, valor_anterior) if valor_anterior else None
+                    obj_nue = await db.get(models.TipoPOA, valor_nuevo) if valor_nuevo else None
+                    v_ant_str = obj_ant.nombre if obj_ant else v_ant_str
+                    v_nue_str = obj_nue.nombre if obj_nue else v_nue_str
+                elif campo == "id_estado_poa":
+                    obj_ant = await db.get(models.EstadoPOA, valor_anterior) if valor_anterior else None
+                    obj_nue = await db.get(models.EstadoPOA, valor_nuevo) if valor_nuevo else None
+                    v_ant_str = obj_ant.nombre if obj_ant else v_ant_str
+                    v_nue_str = obj_nue.nombre if obj_nue else v_nue_str
+
                 historico = models.HistoricoPoa(
                     id_historico=uuid.uuid4(),
                     id_poa=poa.id_poa,
                     id_usuario=usuario.id_usuario,
-                    fecha_modificacion=datetime.now(),  # Usar datetime naive
+                    # Ajuste a hora de Ecuador (UTC-5)
+                    fecha_modificacion=(datetime.now(timezone.utc) - timedelta(hours=5)).replace(tzinfo=None),
                     campo_modificado=campo,
-                    valor_anterior=str(valor_anterior) if valor_anterior is not None else "",
-                    valor_nuevo=str(valor_nuevo) if valor_nuevo is not None else "",
+                    valor_anterior=v_ant_str,
+                    valor_nuevo=v_nue_str,
                     justificacion=justificacion.strip()
                 )
                 db.add(historico)
@@ -840,14 +866,35 @@ async def editar_proyecto(
             valor_nuevo = getattr(data, campo)
 
             if valor_anterior != valor_nuevo:
+                # Resolución de nombres para campos de ID en Proyectos
+                v_ant_str = str(valor_anterior) if valor_anterior is not None else "N/A"
+                v_nue_str = str(valor_nuevo) if valor_nuevo is not None else "N/A"
+
+                if campo == "id_departamento":
+                    obj_ant = await db.get(models.Departamento, valor_anterior) if valor_anterior else None
+                    obj_nue = await db.get(models.Departamento, valor_nuevo) if valor_nuevo else None
+                    v_ant_str = obj_ant.nombre if obj_ant else v_ant_str
+                    v_nue_str = obj_nue.nombre if obj_nue else v_nue_str
+                elif campo == "id_tipo_proyecto":
+                    obj_ant = await db.get(models.TipoProyecto, valor_anterior) if valor_anterior else None
+                    obj_nue = await db.get(models.TipoProyecto, valor_nuevo) if valor_nuevo else None
+                    v_ant_str = obj_ant.nombre if obj_ant else v_ant_str
+                    v_nue_str = obj_nue.nombre if obj_nue else v_nue_str
+                elif campo == "id_estado_proyecto":
+                    obj_ant = await db.get(models.EstadoProyecto, valor_anterior) if valor_anterior else None
+                    obj_nue = await db.get(models.EstadoProyecto, valor_nuevo) if valor_nuevo else None
+                    v_ant_str = obj_ant.nombre if obj_ant else v_ant_str
+                    v_nue_str = obj_nue.nombre if obj_nue else v_nue_str
+
                 historico = models.HistoricoProyecto(
                     id_historico=uuid.uuid4(),
                     id_proyecto=proyecto.id_proyecto,
                     id_usuario=usuario.id_usuario,
-                    fecha_modificacion=datetime.now(),  # Usar datetime naive
+                    # Ajuste a hora de Ecuador (UTC-5)
+                    fecha_modificacion=(datetime.now(timezone.utc) - timedelta(hours=5)).replace(tzinfo=None),
                     campo_modificado=campo,
-                    valor_anterior=str(valor_anterior) if valor_anterior is not None else "",
-                    valor_nuevo=str(valor_nuevo) if valor_nuevo is not None else "",
+                    valor_anterior=v_ant_str,
+                    valor_nuevo=v_nue_str,
                     justificacion=justificacion.strip()
                 )
                 db.add(historico)
