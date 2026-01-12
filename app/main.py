@@ -2164,22 +2164,67 @@ async def obtener_tareas_de_actividad(
 @app.put("/actividades/{id_actividad}", response_model=schemas.ActividadOut)
 async def editar_actividad(
     id_actividad: uuid.UUID,
-    data: schemas.ActividadUpdate,
+    body: dict = Body(...),
     db: AsyncSession = Depends(get_db),
-    usuario: models.Usuario = Depends(get_current_user)
+    usuario_actual: models.Usuario = Depends(get_current_user)
 ):
+    # Extraer datos manualmente
+    descripcion_nueva = body.get("descripcion_actividad")
+    justificacion = body.get("justificacion")
+
+    # Validar justificación
+    if not justificacion or len(justificacion) < 10 or len(justificacion) > 500:
+        raise HTTPException(
+            status_code=400, 
+            detail="La justificación es obligatoria y debe tener entre 10 y 500 caracteres"
+        )
+
+    # Buscar actividad
     result = await db.execute(
         select(models.Actividad).where(models.Actividad.id_actividad == id_actividad)
     )
     actividad = result.scalars().first()
+    
     if not actividad:
         raise HTTPException(status_code=404, detail="Actividad no encontrada")
 
-    actividad.descripcion_actividad = data.descripcion_actividad
-    await db.commit()
-    await db.refresh(actividad)
-
-    return actividad
+    # Guardar valor anterior para el log
+    descripcion_anterior = actividad.descripcion_actividad
+    
+    try:
+        # Actualizar actividad
+        actividad.descripcion_actividad = descripcion_nueva
+        
+        # Registrar rastro de auditoría
+        # Ajustar a la hora de Ecuador (UTC-5)
+        fecha_ecuador = (datetime.now(timezone.utc) - timedelta(hours=5)).replace(tzinfo=None)
+        
+        # Obtener el código de la actividad para que el log sea legible
+        # (El número de actividad suele ser 1, 2, 3...)
+        identificador_actividad = f"Actividad {actividad.numero_actividad or ''}"
+        
+        # Usamos HistoricoPoa ya que la actividad pertenece a un POA
+        historial = models.HistoricoPoa(
+            id_historico=uuid.uuid4(),
+            id_poa=actividad.id_poa,
+            id_usuario=usuario_actual.id_usuario,
+            fecha_modificacion=fecha_ecuador,
+            campo_modificado=f"{identificador_actividad}: Descripción",
+            valor_anterior=str(descripcion_anterior),
+            valor_nuevo=str(descripcion_nueva),
+            justificacion=justificacion
+        )
+        
+        db.add(historial)
+        await db.commit()
+        await db.refresh(actividad)
+        
+        return actividad
+        
+    except Exception as e:
+        await db.rollback()
+        print(f"DEBUG - Error al editar actividad: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error interno al actualizar la actividad: {str(e)}")
 
 async def registrar_historial_poa(db, poa_id, usuario_id, campo, valor_anterior, valor_nuevo, justificacion, reforma_id=None):
     historial = models.HistoricoPoa(
