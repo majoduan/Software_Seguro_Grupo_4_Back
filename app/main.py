@@ -488,9 +488,18 @@ from dateutil.relativedelta import relativedelta
 async def editar_poa(
     id: uuid.UUID,
     data: schemas.PoaCreate,
+    justificacion: str = Body(..., min_length=10, max_length=500),
     db: AsyncSession = Depends(get_db),
     usuario: models.Usuario = Depends(get_current_user)
 ):
+    """
+    Endpoint de edición de POAs con validaciones completas y auditoría.
+    
+    Validaciones aplicadas:
+    - Todas las validaciones de Pydantic
+    - Validaciones de business rules
+    - Justificación obligatoria (10-500 caracteres)
+    """
     # Verificar que el POA exista
     result = await db.execute(select(models.Poa).where(models.Poa.id_poa == id))
     poa = result.scalars().first()
@@ -568,6 +577,32 @@ async def editar_poa(
                 status_code=400,
                 detail=f"No se puede asignar un presupuesto de ${data.presupuesto_asignado:,.2f} porque el POA ya tiene actividades y tareas con un total de ${total_utilizado:,.2f}. El presupuesto asignado debe ser mayor o igual al presupuesto total utilizado."
             )
+
+    # Campos a auditar
+    campos_auditar = [
+        "id_proyecto", "id_periodo", "codigo_poa", "fecha_creacion",
+        "id_tipo_poa", "id_estado_poa", "anio_ejecucion", "presupuesto_asignado"
+    ]
+    
+    for campo in campos_auditar:
+        if not hasattr(data, campo):
+            continue
+        
+        valor_anterior = getattr(poa, campo)
+        valor_nuevo = getattr(data, campo)
+        
+        if valor_anterior != valor_nuevo:
+            historico = models.HistoricoPoa(
+                id_historico=uuid.uuid4(),
+                id_poa=poa.id_poa,
+                id_usuario=usuario.id_usuario,
+                fecha_modificacion=datetime.now(timezone.utc),
+                campo_modificado=campo,
+                valor_anterior=str(valor_anterior) if valor_anterior is not None else "",
+                valor_nuevo=str(valor_nuevo) if valor_nuevo is not None else "",
+                justificacion=justificacion
+            )
+            db.add(historico)
 
     # Actualizar el POA
     poa.id_proyecto = data.id_proyecto
@@ -718,15 +753,17 @@ async def crear_proyecto(
 async def editar_proyecto(
     id: uuid.UUID,
     data: schemas.ProyectoCreate,
+    justificacion: str = Body(..., min_length=10, max_length=500),
     db: AsyncSession = Depends(get_db),
     usuario: models.Usuario = Depends(get_current_user)
 ):
     """
-    Endpoint de edición de proyectos con validaciones completas.
+    Endpoint de edición de proyectos con validaciones completas y auditoría.
 
     Validaciones aplicadas (mismas que en creación):
     - Todas las validaciones de Pydantic
     - Validaciones de business rules (permite mismo código si es el mismo proyecto)
+    - Justificación obligatoria (10-500 caracteres)
     """
     try:
         result = await db.execute(select(models.Proyecto).where(models.Proyecto.id_proyecto == id))
@@ -767,11 +804,11 @@ async def editar_proyecto(
                     id_historico=uuid.uuid4(),
                     id_proyecto=proyecto.id_proyecto,
                     id_usuario=usuario.id_usuario,
-                    fecha_modificacion=datetime.utcnow(),
+                    fecha_modificacion=datetime.now(timezone.utc),
                     campo_modificado=campo,
                     valor_anterior=str(valor_anterior) if valor_anterior is not None else "",
                     valor_nuevo=str(valor_nuevo) if valor_nuevo is not None else "",
-                    justificacion="Actualización manual de proyecto"
+                    justificacion=justificacion
                 )
                 db.add(historico)
                 setattr(proyecto, campo, valor_nuevo)
@@ -3510,3 +3547,106 @@ async def eliminar_programacion_mensual_tarea(
             status_code=500, 
             detail=f"Error interno al eliminar programación mensual: {str(e)}"
         )
+
+# ==================== ENDPOINTS DE HISTÓRICOS ====================
+
+@app.get("/historico-proyectos/", response_model=List[schemas.HistoricoProyectoOut])
+async def obtener_historico_proyectos(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    """
+    Obtener histórico de modificaciones de proyectos
+    
+    Objetivo:
+        Recuperar el registro completo de cambios realizados en proyectos,
+        incluyendo información del usuario que realizó el cambio y el código del proyecto.
+    
+    Parámetros:
+        - skip: Número de registros a saltar (paginación)
+        - limit: Número máximo de registros a retornar
+        - db: Sesión de base de datos
+        - usuario: Usuario autenticado
+    
+    Retorna:
+        Lista de registros históricos con todos los campos necesarios para auditoría
+    """
+    result = await db.execute(
+        select(models.HistoricoProyecto)
+        .options(
+            selectinload(models.HistoricoProyecto.usuario),
+            selectinload(models.HistoricoProyecto.proyecto)
+        )
+        .order_by(models.HistoricoProyecto.fecha_modificacion.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    historicos = result.scalars().all()
+    
+    return [
+        {
+            "id_historico": h.id_historico,
+            "id_proyecto": h.id_proyecto,
+            "campo_modificado": h.campo_modificado,
+            "valor_anterior": h.valor_anterior,
+            "valor_nuevo": h.valor_nuevo,
+            "justificacion": h.justificacion,
+            "fecha_modificacion": h.fecha_modificacion,
+            "usuario": h.usuario.nombre_usuario if h.usuario else "Desconocido",
+            "codigo_proyecto": h.proyecto.codigo_proyecto if h.proyecto else None
+        }
+        for h in historicos
+    ]
+
+@app.get("/historico-poas/", response_model=List[schemas.HistoricoPoaOut])
+async def obtener_historico_poas(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    db: AsyncSession = Depends(get_db),
+    usuario: models.Usuario = Depends(get_current_user)
+):
+    """
+    Obtener histórico de modificaciones de POAs
+    
+    Objetivo:
+        Recuperar el registro completo de cambios realizados en POAs,
+        incluyendo información del usuario, código del POA y código del proyecto asociado.
+    
+    Parámetros:
+        - skip: Número de registros a saltar (paginación)
+        - limit: Número máximo de registros a retornar
+        - db: Sesión de base de datos
+        - usuario: Usuario autenticado
+    
+    Retorna:
+        Lista de registros históricos con todos los campos necesarios para auditoría
+    """
+    result = await db.execute(
+        select(models.HistoricoPoa)
+        .options(
+            selectinload(models.HistoricoPoa.usuario),
+            selectinload(models.HistoricoPoa.poa).selectinload(models.Poa.proyecto)
+        )
+        .order_by(models.HistoricoPoa.fecha_modificacion.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    historicos = result.scalars().all()
+    
+    return [
+        {
+            "id_historico": h.id_historico,
+            "id_poa": h.id_poa,
+            "campo_modificado": h.campo_modificado,
+            "valor_anterior": h.valor_anterior,
+            "valor_nuevo": h.valor_nuevo,
+            "justificacion": h.justificacion,
+            "fecha_modificacion": h.fecha_modificacion,
+            "usuario": h.usuario.nombre_usuario if h.usuario else "Desconocido",
+            "codigo_poa": h.poa.codigo_poa if h.poa else None,
+            "codigo_proyecto": h.poa.proyecto.codigo_proyecto if h.poa and h.poa.proyecto else None
+        }
+        for h in historicos
+    ]
