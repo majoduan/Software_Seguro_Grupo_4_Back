@@ -840,6 +840,25 @@ async def editar_proyecto(
     # Validar todas las reglas de negocio (pasando el ID para excluir en validación de código único)
     await validate_proyecto_business_rules(db, data, proyecto_id=str(id))
 
+    # Validar que el nuevo presupuesto no sea menor que la suma de presupuestos de POAs
+    if data.presupuesto_aprobado is not None:
+        # Obtener la suma de presupuesto_asignado de todos los POAs del proyecto
+        suma_poas_result = await db.execute(
+            select(func.coalesce(func.sum(models.Poa.presupuesto_asignado), Decimal("0")))
+            .where(models.Poa.id_proyecto == id)
+        )
+        suma_poas = suma_poas_result.scalar() or Decimal("0")
+
+        nuevo_presupuesto = Decimal(str(data.presupuesto_aprobado))
+
+        if nuevo_presupuesto < suma_poas:
+            raise HTTPException(
+                status_code=400,
+                detail=f"El presupuesto del proyecto (${nuevo_presupuesto:,.2f}) no puede ser menor "
+                       f"al total asignado en POAs (${suma_poas:,.2f}). "
+                       f"Diferencia: ${(suma_poas - nuevo_presupuesto):,.2f}"
+            )
+
     # Validar tipo y estado (redundante pero mantenido para compatibilidad)
     tipo = await db.execute(select(models.TipoProyecto).where(models.TipoProyecto.id_tipo_proyecto == data.id_tipo_proyecto))
     if not tipo.scalars().first():
