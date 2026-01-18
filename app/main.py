@@ -544,6 +544,23 @@ async def editar_poa(
                 status_code=400,
                 detail=f"Ya existe un POA asignado al periodo '{periodo.nombre_periodo}'"
             )
+
+    # Verificar si el año de ejecución ya está ocupado por otro POA del mismo proyecto
+    if poa.anio_ejecucion != data.anio_ejecucion:
+        result = await db.execute(
+            select(models.Poa)
+            .where(
+                models.Poa.id_proyecto == data.id_proyecto,
+                models.Poa.anio_ejecucion == data.anio_ejecucion,
+                models.Poa.id_poa != poa.id_poa
+            )
+        )
+        poa_mismo_anio = result.scalars().first()
+        if poa_mismo_anio:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Ya existe un POA para el año de ejecución {data.anio_ejecucion} en este proyecto"
+            )
    
     # Verificar existencia del tipo POA
     result = await db.execute(select(models.TipoPOA).where(models.TipoPOA.id_tipo_poa == data.id_tipo_poa))
