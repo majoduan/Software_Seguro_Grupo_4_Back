@@ -30,22 +30,10 @@ Retorna:
 """
 
 DATABASE_URL = os.getenv("DATABASE_URL")
-
-# Manejar caso de testing donde DATABASE_URL puede no estar configurada
-if DATABASE_URL is None:
-    # URL de base de datos para entorno de pruebas (no se conecta realmente)
-    DATABASE_URL = "postgresql+asyncpg://test:test@localhost:5432/test_db"
-
 ssl_context = ssl.create_default_context()
 
-# Limpiar URL de parámetros que pueden causar conflictos
-cleaned_url = DATABASE_URL.replace("?sslmode=require&channel_binding=require", "")
-cleaned_url = cleaned_url.replace("&channel_binding=require", "")
-cleaned_url = cleaned_url.replace("channel_binding=require&", "")
-cleaned_url = cleaned_url.replace("?channel_binding=require", "")
-
 engine = create_async_engine(
-    cleaned_url,
+    DATABASE_URL.replace("?sslmode=require&channel_binding=require", ""),  # limpia la URL
     echo=True,
     connect_args={"ssl": ssl_context}
 )

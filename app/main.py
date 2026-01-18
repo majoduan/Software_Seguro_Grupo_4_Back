@@ -2328,17 +2328,9 @@ async def editar_tarea_en_reforma(
     if not reforma:
         raise HTTPException(status_code=404, detail="Reforma no encontrada")
 
-    actividad = await db.get(models.Actividad, tarea.id_actividad)
-    if not actividad:
-        raise HTTPException(status_code=404, detail="Actividad no encontrada")
-    
-    poa = await db.get(models.Poa, actividad.id_poa)
+    poa = await db.get(models.Poa, tarea.id_actividad)
     if not poa or poa.id_poa != reforma.id_poa:
         raise HTTPException(status_code=400, detail="Tarea no pertenece al POA de esta reforma")
-
-    # Guardar valores anteriores para el historial
-    anterior_cantidad = tarea.cantidad
-    anterior_precio = tarea.precio_unitario
 
     tarea.cantidad = data.cantidad
     tarea.precio_unitario = data.precio_unitario
@@ -2355,7 +2347,7 @@ async def editar_tarea_en_reforma(
         id_usuario=usuario.id_usuario,
         fecha_modificacion=datetime.now(),
         campo_modificado="Tarea",
-        valor_anterior=f"Cantidad: {anterior_cantidad}, Precio: {anterior_precio}",
+        valor_anterior=f"Cantidad: {data.anterior_cantidad}, Precio: {data.anterior_precio}",
         valor_nuevo=f"Cantidad: {data.cantidad}, Precio: {data.precio_unitario}",
         justificacion=data.justificacion,
         id_reforma=reforma.id_reforma

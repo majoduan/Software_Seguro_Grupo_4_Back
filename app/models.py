@@ -1,4 +1,5 @@
-from sqlalchemy import Column, String, Integer, Boolean, Date, DateTime, DECIMAL, Numeric, ForeignKey, Text, UniqueConstraint, UUID
+from sqlalchemy import Column, String, Integer, Boolean, Date, DateTime, DECIMAL, Numeric, ForeignKey, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import uuid
 from app.database import Base
@@ -11,7 +12,7 @@ from datetime import datetime,timezone
 class TipoPOA(Base):
     __tablename__ = "TIPO_POA"
 
-    id_tipo_poa = Column(UUID, primary_key=True, default=uuid.uuid4)
+    id_tipo_poa = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     codigo_tipo = Column(String(20), nullable=False)
     nombre = Column(String(100), nullable=False)
     descripcion = Column(String(500))
@@ -22,7 +23,7 @@ class TipoPOA(Base):
 class TipoProyecto(Base):
     __tablename__ = "TIPO_PROYECTO"
 
-    id_tipo_proyecto = Column(UUID, primary_key=True, default=uuid.uuid4)
+    id_tipo_proyecto = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     codigo_tipo = Column(String(20), nullable=False)
     nombre = Column(String(50), nullable=False)
     descripcion = Column(String(500))
@@ -32,7 +33,7 @@ class TipoProyecto(Base):
 class EstadoProyecto(Base):
     __tablename__ = "ESTADO_PROYECTO"
 
-    id_estado_proyecto = Column(UUID, primary_key=True, default=uuid.uuid4)
+    id_estado_proyecto = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     nombre = Column(String(50), nullable=False)
     descripcion = Column(String(500))
     permite_edicion = Column(Boolean, nullable=False, default=True)
@@ -40,7 +41,7 @@ class EstadoProyecto(Base):
 class Departamento(Base):
     __tablename__ = "DEPARTAMENTO"
 
-    id_departamento = Column(UUID, primary_key=True, default=uuid.uuid4)
+    id_departamento = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     nombre = Column(String(100), nullable=False)
     descripcion = Column(String(500))
 
@@ -48,7 +49,7 @@ class Departamento(Base):
 class Rol(Base):
     __tablename__ = "ROL"
 
-    id_rol = Column(UUID, primary_key=True, default=uuid.uuid4)
+    id_rol = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     nombre_rol = Column(String(50), nullable=False)
     descripcion = Column(String(200))
 
@@ -57,11 +58,11 @@ class Rol(Base):
 class Usuario(Base):
     __tablename__ = "USUARIO"
 
-    id_usuario = Column(UUID, primary_key=True, default=uuid.uuid4)
+    id_usuario = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     nombre_usuario = Column(String(100), nullable=False)
     email = Column(String(100), nullable=False)
     password_hash = Column(String(255), nullable=False)
-    id_rol = Column(UUID, ForeignKey("ROL.id_rol"), nullable=False)
+    id_rol = Column(UUID(as_uuid=True), ForeignKey("ROL.id_rol"), nullable=False)
     activo = Column(Boolean, nullable=False, default=True)
 
     rol = relationship("Rol", back_populates="usuarios")
@@ -69,12 +70,12 @@ class Usuario(Base):
 class Proyecto(Base):
     __tablename__ = "PROYECTO"
 
-    id_proyecto = Column(UUID, primary_key=True, default=uuid.uuid4)
+    id_proyecto = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     codigo_proyecto = Column(String(50), nullable=False)
     titulo = Column(String(2000), nullable=False)
-    id_tipo_proyecto = Column(UUID, ForeignKey("TIPO_PROYECTO.id_tipo_proyecto"), nullable=False)
-    id_estado_proyecto = Column(UUID, ForeignKey("ESTADO_PROYECTO.id_estado_proyecto"), nullable=False)
-    id_departamento = Column(UUID, ForeignKey("DEPARTAMENTO.id_departamento"), nullable=True)
+    id_tipo_proyecto = Column(UUID(as_uuid=True), ForeignKey("TIPO_PROYECTO.id_tipo_proyecto"), nullable=False)
+    id_estado_proyecto = Column(UUID(as_uuid=True), ForeignKey("ESTADO_PROYECTO.id_estado_proyecto"), nullable=False)
+    id_departamento = Column(UUID(as_uuid=True), ForeignKey("DEPARTAMENTO.id_departamento"), nullable=True)
     id_director_proyecto = Column(String(200), nullable=True)
     presupuesto_aprobado = Column(DECIMAL(18, 2))
     fecha_creacion = Column(DateTime, nullable=False)
@@ -92,7 +93,7 @@ class Proyecto(Base):
 class Periodo(Base):
     __tablename__ = "PERIODO"
 
-    id_periodo = Column(UUID, primary_key=True, default=uuid.uuid4)
+    id_periodo = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     codigo_periodo = Column(String(150), nullable=False)
     nombre_periodo = Column(String(180), nullable=False)
     fecha_inicio = Column(Date, nullable=False)
@@ -104,15 +105,15 @@ class Periodo(Base):
 class EstadoPOA(Base):
     __tablename__ = "ESTADO_POA"
 
-    id_estado_poa = Column(UUID, primary_key=True, default=uuid.uuid4)
+    id_estado_poa = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     nombre = Column(String(50), nullable=False)
     descripcion = Column(String(500))
 
 class LimiteProyectosTipo(Base):
     __tablename__ = "LIMITE_PROYECTOS_TIPO"
 
-    id_limite = Column(UUID, primary_key=True, default=uuid.uuid4)
-    id_tipo_proyecto = Column(UUID, ForeignKey("TIPO_PROYECTO.id_tipo_proyecto"), nullable=False)
+    id_limite = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_tipo_proyecto = Column(UUID(as_uuid=True), ForeignKey("TIPO_PROYECTO.id_tipo_proyecto"), nullable=False)
     limite_proyectos = Column(Integer, nullable=False, default=1)
     descripcion = Column(String(200))
 
@@ -121,13 +122,13 @@ class LimiteProyectosTipo(Base):
 class Poa(Base):
     __tablename__ = "POA"
 
-    id_poa = Column(UUID, primary_key=True, default=uuid.uuid4)
-    id_proyecto = Column(UUID, ForeignKey("PROYECTO.id_proyecto"), nullable=False)
-    id_periodo = Column(UUID, ForeignKey("PERIODO.id_periodo"), nullable=False)
+    id_poa = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_proyecto = Column(UUID(as_uuid=True), ForeignKey("PROYECTO.id_proyecto"), nullable=False)
+    id_periodo = Column(UUID(as_uuid=True), ForeignKey("PERIODO.id_periodo"), nullable=False)
     codigo_poa = Column(String(50), nullable=False)
     fecha_creacion = Column(DateTime, nullable=False)
-    id_estado_poa = Column(UUID, ForeignKey("ESTADO_POA.id_estado_poa"), nullable=False)
-    id_tipo_poa = Column(UUID, ForeignKey("TIPO_POA.id_tipo_poa"), nullable=False)
+    id_estado_poa = Column(UUID(as_uuid=True), ForeignKey("ESTADO_POA.id_estado_poa"), nullable=False)
+    id_tipo_poa = Column(UUID(as_uuid=True), ForeignKey("TIPO_POA.id_tipo_poa"), nullable=False)
     anio_ejecucion = Column(String(4), nullable=False)
     presupuesto_asignado = Column(DECIMAL(18, 2), nullable=False)
 
@@ -140,7 +141,7 @@ class Poa(Base):
 class ItemPresupuestario(Base):
     __tablename__ = "ITEM_PRESUPUESTARIO"
 
-    id_item_presupuestario = Column(UUID, primary_key=True, default=uuid.uuid4)
+    id_item_presupuestario = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     codigo = Column(String(20), nullable=False)
     nombre = Column(String(100), nullable=False)
     descripcion = Column(String(500))
@@ -150,8 +151,8 @@ class ItemPresupuestario(Base):
 class DetalleTarea(Base):
     __tablename__ = "DETALLE_TAREA"
 
-    id_detalle_tarea = Column(UUID, primary_key=True, default=uuid.uuid4)
-    id_item_presupuestario = Column(UUID, ForeignKey("ITEM_PRESUPUESTARIO.id_item_presupuestario"), nullable=False)
+    id_detalle_tarea = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_item_presupuestario = Column(UUID(as_uuid=True), ForeignKey("ITEM_PRESUPUESTARIO.id_item_presupuestario"), nullable=False)
     nombre = Column(String(500), nullable=False)
     descripcion = Column(String(500))
     caracteristicas = Column(String(500))
@@ -162,9 +163,9 @@ class DetalleTarea(Base):
 class TipoPoaDetalleTarea(Base):
     __tablename__ = "TIPO_POA_DETALLE_TAREA"
 
-    id_tipo_poa_detalle_tarea = Column(UUID, primary_key=True, default=uuid.uuid4)
-    id_tipo_poa = Column(UUID, ForeignKey("TIPO_POA.id_tipo_poa"), nullable=False)
-    id_detalle_tarea = Column(UUID, ForeignKey("DETALLE_TAREA.id_detalle_tarea"), nullable=False)
+    id_tipo_poa_detalle_tarea = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_tipo_poa = Column(UUID(as_uuid=True), ForeignKey("TIPO_POA.id_tipo_poa"), nullable=False)
+    id_detalle_tarea = Column(UUID(as_uuid=True), ForeignKey("DETALLE_TAREA.id_detalle_tarea"), nullable=False)
 
     tipo_poa = relationship("TipoPOA")
     detalle_tarea = relationship("DetalleTarea")
@@ -172,8 +173,8 @@ class TipoPoaDetalleTarea(Base):
 class LimiteActividadesTipoPoa(Base):
     __tablename__ = "LIMITE_ACTIVIDADES_TIPO_POA"
 
-    id_limite = Column(UUID, primary_key=True, default=uuid.uuid4)
-    id_tipo_poa = Column(UUID, ForeignKey("TIPO_POA.id_tipo_poa"), nullable=False)
+    id_limite = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_tipo_poa = Column(UUID(as_uuid=True), ForeignKey("TIPO_POA.id_tipo_poa"), nullable=False)
     limite_actividades = Column(Integer, nullable=False, default=10)
     descripcion = Column(String(200))
 
@@ -182,8 +183,8 @@ class LimiteActividadesTipoPoa(Base):
 class Actividad(Base):
     __tablename__ = "ACTIVIDAD"
 
-    id_actividad = Column(UUID, primary_key=True, default=uuid.uuid4)
-    id_poa = Column(UUID, ForeignKey("POA.id_poa"), nullable=False)
+    id_actividad = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_poa = Column(UUID(as_uuid=True), ForeignKey("POA.id_poa"), nullable=False)
     numero_actividad = Column(Integer, nullable=True)  # Orden de la actividad (1, 2, 3, ...)
     descripcion_actividad = Column(String(500), nullable=False)
     total_por_actividad = Column(DECIMAL(18, 2), nullable=False)
@@ -195,9 +196,9 @@ class Actividad(Base):
 class Tarea(Base):
     __tablename__ = "TAREA"
 
-    id_tarea = Column(UUID, primary_key=True, default=uuid.uuid4)
-    id_actividad = Column(UUID, ForeignKey("ACTIVIDAD.id_actividad"), nullable=False)
-    id_detalle_tarea = Column(UUID, ForeignKey("DETALLE_TAREA.id_detalle_tarea"), nullable=True)
+    id_tarea = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_actividad = Column(UUID(as_uuid=True), ForeignKey("ACTIVIDAD.id_actividad"), nullable=False)
+    id_detalle_tarea = Column(UUID(as_uuid=True), ForeignKey("DETALLE_TAREA.id_detalle_tarea"), nullable=True)
     nombre = Column(String(200))
 
     detalle_descripcion = Column(String(5000))
@@ -215,8 +216,8 @@ class Tarea(Base):
 class ProgramacionMensual(Base):
     __tablename__ = "PROGRAMACION_MENSUAL"
 
-    id_programacion = Column(UUID, primary_key=True, default=uuid.uuid4)
-    id_tarea = Column(UUID, ForeignKey("TAREA.id_tarea"), nullable=False)
+    id_programacion = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_tarea = Column(UUID(as_uuid=True), ForeignKey("TAREA.id_tarea"), nullable=False)
     mes = Column(String(15), nullable=False)  # Formato: '01-2026', '02-2026', etc.
     valor = Column(DECIMAL(18, 2), nullable=False)
 
@@ -247,7 +248,7 @@ class Permiso(Base):
     """
     __tablename__ = "PERMISO"
 
-    id_permiso = Column(UUID, primary_key=True, default=uuid.uuid4)
+    id_permiso = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     codigo_permiso = Column(String(50), nullable=False)
     descripcion = Column(String(200))
     modulo = Column(String(50), nullable=False)
@@ -277,9 +278,9 @@ class PermisoRol(Base):
 
     __tablename__ = "PERMISO_ROL"
 
-    id_permiso_rol = Column(UUID, primary_key=True, default=uuid.uuid4)
-    id_rol = Column(UUID, ForeignKey("ROL.id_rol"), nullable=False)
-    id_permiso = Column(UUID, ForeignKey("PERMISO.id_permiso"), nullable=False)
+    id_permiso_rol = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_rol = Column(UUID(as_uuid=True), ForeignKey("ROL.id_rol"), nullable=False)
+    id_permiso = Column(UUID(as_uuid=True), ForeignKey("PERMISO.id_permiso"), nullable=False)
 
     permiso = relationship("Permiso", back_populates="roles")
     rol = relationship("Rol")
@@ -287,16 +288,16 @@ class PermisoRol(Base):
 class ReformaPoa(Base):
     __tablename__ = "REFORMA_POA"
 
-    id_reforma = Column(UUID, primary_key=True, default=uuid.uuid4)
-    id_poa = Column(UUID, ForeignKey("POA.id_poa"), nullable=False)
+    id_reforma = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_poa = Column(UUID(as_uuid=True), ForeignKey("POA.id_poa"), nullable=False)
     fecha_solicitud = Column(DateTime, nullable=False)
     fecha_aprobacion = Column(DateTime)
     estado_reforma = Column(String(50), nullable=False)
     monto_anterior = Column(DECIMAL(18, 2), nullable=False)
     monto_solicitado = Column(DECIMAL(18, 2), nullable=False)
     justificacion = Column(String(500), nullable=False)
-    id_usuario_solicita = Column(UUID, ForeignKey("USUARIO.id_usuario"), nullable=False)
-    id_usuario_aprueba = Column(UUID, ForeignKey("USUARIO.id_usuario"))
+    id_usuario_solicita = Column(UUID(as_uuid=True), ForeignKey("USUARIO.id_usuario"), nullable=False)
+    id_usuario_aprueba = Column(UUID(as_uuid=True), ForeignKey("USUARIO.id_usuario"))
 
     poa = relationship("Poa")
     usuario_solicita = relationship("Usuario", foreign_keys=[id_usuario_solicita])
@@ -305,15 +306,15 @@ class ReformaPoa(Base):
 class ControlPresupuestario(Base):
     __tablename__ = "CONTROL_PRESUPUESTARIO"
 
-    id_control = Column(UUID, primary_key=True, default=uuid.uuid4)
-    id_poa = Column(UUID, ForeignKey("POA.id_poa"), nullable=False)
-    id_tarea = Column(UUID, ForeignKey("TAREA.id_tarea"), nullable=False)
+    id_control = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_poa = Column(UUID(as_uuid=True), ForeignKey("POA.id_poa"), nullable=False)
+    id_tarea = Column(UUID(as_uuid=True), ForeignKey("TAREA.id_tarea"), nullable=False)
     fecha_registro = Column(DateTime, nullable=False)
     monto_certificado = Column(DECIMAL(18, 2), nullable=False)
     monto_comprometido = Column(DECIMAL(18, 2), nullable=False)
     monto_devengado = Column(DECIMAL(18, 2), nullable=False, default=0)
     saldo_disponible = Column(DECIMAL(18, 2), nullable=False)
-    id_reforma = Column(UUID, ForeignKey("REFORMA_POA.id_reforma"))
+    id_reforma = Column(UUID(as_uuid=True), ForeignKey("REFORMA_POA.id_reforma"))
     justificacion = Column(String(500))
     referencia_documento = Column(String(100))
 
@@ -324,15 +325,15 @@ class ControlPresupuestario(Base):
 class EjecucionPresupuestaria(Base):
     __tablename__ = "EJECUCION_PRESUPUESTARIA"
 
-    id_ejecucion = Column(UUID, primary_key=True, default=uuid.uuid4)
-    id_tarea = Column(UUID, ForeignKey("TAREA.id_tarea"), nullable=False)
-    id_poa = Column(UUID, ForeignKey("POA.id_poa"), nullable=False)
+    id_ejecucion = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_tarea = Column(UUID(as_uuid=True), ForeignKey("TAREA.id_tarea"), nullable=False)
+    id_poa = Column(UUID(as_uuid=True), ForeignKey("POA.id_poa"), nullable=False)
     monto_ejecutado = Column(DECIMAL(18, 2), nullable=False)
     fecha_ejecucion = Column(DateTime, nullable=False)
     descripcion_ejecucion = Column(String(500))
     referencia_documento = Column(String(100))
     bloqueado = Column(Boolean, nullable=False, default=False)
-    id_control_presupuestario = Column(UUID, ForeignKey("CONTROL_PRESUPUESTARIO.id_control"))
+    id_control_presupuestario = Column(UUID(as_uuid=True), ForeignKey("CONTROL_PRESUPUESTARIO.id_control"))
 
     tarea = relationship("Tarea")
     poa = relationship("Poa")
@@ -363,9 +364,9 @@ class HistoricoProyecto(Base):
 
     __tablename__ = "HISTORICO_PROYECTO"
 
-    id_historico = Column(UUID, primary_key=True, default=uuid.uuid4)
-    id_proyecto = Column(UUID, ForeignKey("PROYECTO.id_proyecto"), nullable=False)
-    id_usuario = Column(UUID, ForeignKey("USUARIO.id_usuario"), nullable=False)
+    id_historico = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_proyecto = Column(UUID(as_uuid=True), ForeignKey("PROYECTO.id_proyecto"), nullable=False)
+    id_usuario = Column(UUID(as_uuid=True), ForeignKey("USUARIO.id_usuario"), nullable=False)
     fecha_modificacion = Column(DateTime, nullable=False)
     campo_modificado = Column(String(100), nullable=False)
     valor_anterior = Column(Text)
@@ -399,15 +400,15 @@ class HistoricoPoa(Base):
 
     __tablename__ = "HISTORICO_POA"
 
-    id_historico = Column(UUID, primary_key=True, default=uuid.uuid4)
-    id_poa = Column(UUID, ForeignKey("POA.id_poa"), nullable=False)
-    id_usuario = Column(UUID, ForeignKey("USUARIO.id_usuario"), nullable=False)
+    id_historico = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id_poa = Column(UUID(as_uuid=True), ForeignKey("POA.id_poa"), nullable=False)
+    id_usuario = Column(UUID(as_uuid=True), ForeignKey("USUARIO.id_usuario"), nullable=False)
     fecha_modificacion = Column(DateTime, nullable=False)
     campo_modificado = Column(String(100), nullable=False)
     valor_anterior = Column(Text)
     valor_nuevo = Column(Text)
     justificacion = Column(String(500), nullable=False)
-    id_reforma = Column(UUID, ForeignKey("REFORMA_POA.id_reforma"))
+    id_reforma = Column(UUID(as_uuid=True), ForeignKey("REFORMA_POA.id_reforma"))
 
     poa = relationship("Poa")
     usuario = relationship("Usuario")
@@ -415,7 +416,7 @@ class HistoricoPoa(Base):
 
 class LogCargaExcel(Base):
     __tablename__ = "LOG_CARGA_EXCEL"
-    id_log = Column(UUID, primary_key=True, default=uuid.uuid4)
+    id_log = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     id_poa = Column(String(36), nullable=True)              # UUID del POA como string
     codigo_poa = Column(String(100), nullable=True)         # Código POA visible
     id_usuario = Column(String(36), nullable=True)          # UUID del usuario como string
