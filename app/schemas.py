@@ -5,7 +5,6 @@ from datetime import date, datetime
 from typing import Optional, List, Annotated
 from app.validators import (
     validate_director_name,
-    validate_password_strength,
     validate_username,
     validate_email_format,
     validate_anio_format,
@@ -73,11 +72,8 @@ class UserCreate(BaseModel):
         """Valida que el nombre de usuario solo contenga alfanuméricos y espacios"""
         return validate_username(v)
 
-    @field_validator('password')
-    @classmethod
-    def validate_password_complexity(cls, v):
-        """Valida la complejidad de la contraseña (mayúscula + número)"""
-        return validate_password_strength(v)
+    # Nota: La validación de fortaleza de contraseña se realiza en el frontend
+    # antes de hashear con SHA-256. El backend recibe el hash, no la contraseña original.
 
 class UserOut(BaseModel):
     """
