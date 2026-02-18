@@ -30,12 +30,25 @@ Retorna:
 """
 
 DATABASE_URL = os.getenv("DATABASE_URL")
-ssl_context = ssl.create_default_context()
+
+# Detectar si la URL requiere SSL (NEON/producción) o no (local/Docker)
+# NEON usa URLs con parámetros SSL en la cadena de conexión
+requires_ssl = "sslmode=require" in DATABASE_URL or "neon.tech" in DATABASE_URL
+
+# Limpiar parámetros SSL de la URL si existen
+clean_url = DATABASE_URL.replace("?sslmode=require&channel_binding=require", "")
+
+# Configurar connect_args según si se requiere SSL
+if requires_ssl:
+    ssl_context = ssl.create_default_context()
+    connect_args = {"ssl": ssl_context}
+else:
+    connect_args = {}
 
 engine = create_async_engine(
-    DATABASE_URL.replace("?sslmode=require&channel_binding=require", ""),  # limpia la URL
+    clean_url,
     echo=True,
-    connect_args={"ssl": ssl_context}
+    connect_args=connect_args
 )
 SessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 Base = declarative_base()
